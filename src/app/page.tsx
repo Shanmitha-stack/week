@@ -5,7 +5,6 @@ import React, { useState, ChangeEvent, useEffect } from 'react';
 import Image from 'next/image';
 import AppHeader from '@/components/AppHeader';
 import SectionCard from '@/components/SectionCard';
-import AudioPlayer from '@/components/AudioPlayer';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -17,7 +16,6 @@ import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 export default function Home() {
   const [textInput, setTextInput] = useState<string>('');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
-  const [audioSrc, setAudioSrc] = useState<string | null>(null); 
   
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -56,7 +54,6 @@ export default function Home() {
       return;
     }
     setIsGeneratingSpeech(true);
-    setAudioSrc(null); 
 
     let imageDataUri: string | undefined = undefined;
     if (selectedImage) {
@@ -76,10 +73,9 @@ export default function Home() {
       
       toast({ 
         title: "Input Processed for Speech", 
-        description: `Text prepared: "${preparedText}". Image content (if any) was not described. Actual TTS audio generation is not available. A sample audio will play to demonstrate the player.`,
+        description: `Text prepared: "${preparedText}". Image content (if any) was not described. Actual TTS audio generation is not available.`,
         duration: 8000, 
       });
-      setAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"); 
 
     } catch (error) {
       console.error("Error in text-to-speech process:", error);
@@ -166,13 +162,6 @@ export default function Home() {
                   "Process Input for Speech"
                 )}
               </Button>
-
-              {audioSrc && (
-                <div className="mt-4">
-                  <Label className="text-base mb-2 block">Generated Audio (Sample):</Label>
-                  <AudioPlayer src={audioSrc} autoPlay={true}/>
-                </div>
-              )}
             </div>
           </SectionCard>
 

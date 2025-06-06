@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, ChangeEvent, useEffect } from 'react';
+import React, { useState, ChangeEvent, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import AppHeader from '@/components/AppHeader';
 import SectionCard from '@/components/SectionCard';
@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, Mic, Loader2, UploadCloud, ImagePlus } from 'lucide-react';
+import { Text, Mic, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 
 export default function Home() {
@@ -24,7 +24,22 @@ export default function Home() {
   const [selectedVoiceSample, setSelectedVoiceSample] = useState<File | null>(null);
   const [isUploadingSample, setIsUploadingSample] = useState<boolean>(false);
 
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
+
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      setIsSpeechSupported(true);
+    }
+    // Cleanup speech synthesis on component unmount or if speaking is interrupted
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -54,6 +69,13 @@ export default function Home() {
       toast({ title: "Input Required", description: "Please enter some text or select an image.", variant: "destructive" });
       return;
     }
+    
+    // Stop any ongoing speech
+    if (isSpeaking && typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
+
     setIsGeneratingSpeech(true);
     setPreparedSpeechText(null); 
 
@@ -75,8 +97,8 @@ export default function Home() {
       
       toast({ 
         title: "Input Processed for Speech", 
-        description: `The text has been refined by AI and is shown below. Image content (if any) was not used for the speech text. Actual audio generation is not available.`,
-        duration: 8000, 
+        description: `The text has been refined by AI and is shown below. ${isSpeechSupported ? "You can now use the 'Speak' button to hear it." : "Browser speech synthesis is not supported."}`,
+        duration: 6000, 
       });
 
     } catch (error) {
@@ -87,6 +109,38 @@ export default function Home() {
       setIsGeneratingSpeech(false);
     }
   };
+
+  const handleSpeakPreparedText = useCallback(() => {
+    if (!isSpeechSupported) {
+      toast({ title: "Speech Not Supported", description: "Your browser does not support speech synthesis.", variant: "destructive" });
+      return;
+    }
+
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+
+    if (preparedSpeechText && preparedSpeechText.trim() !== "") {
+      const utterance = new SpeechSynthesisUtterance(preparedSpeechText);
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+      };
+      utterance.onend = () => {
+        setIsSpeaking(false);
+      };
+      utterance.onerror = (event) => {
+        console.error("Speech synthesis error:", event);
+        toast({ title: "Speech Error", description: "Could not play speech. Please try again.", variant: "destructive" });
+        setIsSpeaking(false);
+      };
+      window.speechSynthesis.speak(utterance);
+    } else {
+      toast({ title: "Nothing to Speak", description: "There is no prepared text to speak.", variant: "default" });
+    }
+  }, [preparedSpeechText, isSpeaking, isSpeechSupported, toast]);
+
 
   const handleVoiceSampleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -168,11 +222,35 @@ export default function Home() {
 
               {preparedSpeechText && (
                 <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">
-                  <Label className="text-lg font-semibold text-foreground block mb-2">Prepared Text for Speech:</Label>
+                  <div className="flex justify-between items-center mb-2">
+                    <Label className="text-lg font-semibold text-foreground">Prepared Text for Speech:</Label>
+                    {isSpeechSupported && preparedSpeechText.trim() !== "" && (
+                      <Button
+                        onClick={handleSpeakPreparedText}
+                        variant="outline"
+                        size="sm"
+                        disabled={isGeneratingSpeech}
+                      >
+                        {isSpeaking ? (
+                          <>
+                            <StopCircle className="mr-2 h-4 w-4" />
+                            Stop Speaking
+                          </>
+                        ) : (
+                          <>
+                            <Volume2 className="mr-2 h-4 w-4" />
+                            Speak
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
                   <p className="text-base whitespace-pre-wrap text-foreground/90">{preparedSpeechText}</p>
-                  <p className="mt-3 text-sm text-muted-foreground italic">
-                    This is the text refined by AI for natural speech. Actual audio generation is not available.
-                  </p>
+                   {!isSpeechSupported && preparedSpeechText.trim() !== "" && (
+                    <p className="mt-3 text-sm text-muted-foreground italic">
+                      Your browser does not support speech synthesis.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

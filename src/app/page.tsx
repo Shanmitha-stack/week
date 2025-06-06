@@ -17,7 +17,7 @@ import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 export default function Home() {
   const [textInput, setTextInput] = useState<string>('');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
-  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  // const [audioSrc, setAudioSrc] = useState<string | null>(null); // Audio generation is mocked
   
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -52,11 +52,11 @@ export default function Home() {
 
   const handleTextToSpeech = async () => {
     if (!textInput.trim() && !selectedImage) {
-      toast({ title: "Input Required", description: "Please enter some text or select an image to process.", variant: "destructive" });
+      toast({ title: "Input Required", description: "Please enter some text or select an image.", variant: "destructive" });
       return;
     }
     setIsGeneratingSpeech(true);
-    setAudioSrc(null); // Clear previous audio
+    // setAudioSrc(null); // Clear previous audio, though it's mocked
 
     let imageDataUri: string | undefined = undefined;
     if (selectedImage) {
@@ -71,19 +71,14 @@ export default function Home() {
     }
 
     try {
-      // Use an empty string for text input if it's only whitespace and an image is provided
-      const currentText = textInput.trim() === '' && selectedImage ? '' : textInput;
-      const { preparedText } = await prepareTextForSpeech({ text: currentText, imageDataUri });
+      const { preparedText } = await prepareTextForSpeech({ text: textInput, imageDataUri });
       console.log("Prepared text for TTS:", preparedText);
       
-      // Simulate TTS generation and provide a mock audio source
-      // In a real app, you would call a TTS service here and get an audio URL or data
-      // For now, we'll use a toast notification.
       toast({ 
         title: "Input Processed", 
-        description: `Your input has been prepared: "${preparedText}". Actual audio generation is not currently available.` 
+        description: `Text prepared for speech: "${preparedText}". Image content (if any) was not described. Actual audio generation is not currently available.` 
       });
-      // setAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"); // Mock audio source
+      // setAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"); // Mock audio source removed
 
     } catch (error) {
       console.error("Error in text-to-speech process:", error);
@@ -137,7 +132,7 @@ export default function Home() {
               <div className="space-y-2">
                 <Label htmlFor="image-input" className="text-base flex items-center gap-2">
                   <ImagePlus className="h-5 w-5 text-muted-foreground" />
-                  Optional: Add an image
+                  Optional: Add an image (will not be described in speech)
                 </Label>
                 <Input
                   id="image-input"
@@ -170,12 +165,6 @@ export default function Home() {
                   "Process Input for Speech"
                 )}
               </Button>
-              {/* {audioSrc && !isGeneratingSpeech && (
-                <div className="mt-4">
-                  <Label className="text-base block mb-2">Generated Speech:</Label>
-                  <AudioPlayer src={audioSrc} autoPlay={false} />
-                </div>
-              )} */}
             </div>
           </SectionCard>
 
@@ -219,3 +208,4 @@ export default function Home() {
     </div>
   );
 }
+

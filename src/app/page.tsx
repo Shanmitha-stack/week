@@ -19,6 +19,7 @@ export default function Home() {
   
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [preparedSpeechText, setPreparedSpeechText] = useState<string | null>(null);
 
   const [selectedVoiceSample, setSelectedVoiceSample] = useState<File | null>(null);
   const [isUploadingSample, setIsUploadingSample] = useState<boolean>(false);
@@ -54,6 +55,7 @@ export default function Home() {
       return;
     }
     setIsGeneratingSpeech(true);
+    setPreparedSpeechText(null); // Clear previous results
 
     let imageDataUri: string | undefined = undefined;
     if (selectedImage) {
@@ -69,17 +71,18 @@ export default function Home() {
 
     try {
       const { preparedText } = await prepareTextForSpeech({ text: textInput, imageDataUri });
-      console.log("Prepared text for TTS:", preparedText);
+      setPreparedSpeechText(preparedText);
       
       toast({ 
         title: "Input Processed for Speech", 
-        description: `Text prepared: "${preparedText}". Image content (if any) was not described. Actual TTS audio generation is not available.`,
+        description: `Text prepared and shown below. Image content (if any) was not described. Actual TTS audio generation is not available.`,
         duration: 8000, 
       });
 
     } catch (error) {
       console.error("Error in text-to-speech process:", error);
-      toast({ title: "Error", description: "Failed to process input for speech.", variant: "destructive" });
+      setPreparedSpeechText("Error: Could not process input for speech.");
+      toast({ title: "Error", description: "Failed to process input for speech. See details below.", variant: "destructive" });
     } finally {
       setIsGeneratingSpeech(false);
     }
@@ -103,7 +106,7 @@ export default function Home() {
     // Simulate upload
     await new Promise(resolve => setTimeout(resolve, 1500));
     setIsUploadingSample(false);
-    toast({ title: "Sample Uploaded (Mock)", description: "Voice sample upload would be handled here." });
+    toast({ title: "Sample Uploaded (Mock)", description: "Voice sample upload would be handled here. Voice cloning is not yet implemented." });
   };
 
   return (
@@ -129,7 +132,7 @@ export default function Home() {
               <div className="space-y-2">
                 <Label htmlFor="image-input" className="text-base flex items-center gap-2">
                   <ImagePlus className="h-5 w-5 text-muted-foreground" />
-                  Optional: Add an image (will not be described in speech)
+                  Optional: Add an image (image content will NOT be described in speech output)
                 </Label>
                 <Input
                   id="image-input"
@@ -162,11 +165,21 @@ export default function Home() {
                   "Process Input for Speech"
                 )}
               </Button>
+
+              {preparedSpeechText && (
+                <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">
+                  <Label className="text-lg font-semibold text-foreground block mb-2">Prepared Text for Speech:</Label>
+                  <p className="text-base whitespace-pre-wrap text-foreground/90">{preparedSpeechText}</p>
+                  <p className="mt-3 text-sm text-muted-foreground italic">
+                    This is the text refined by AI for natural speech. Actual audio generation is not available.
+                  </p>
+                </div>
+              )}
             </div>
           </SectionCard>
 
           {/* Voice Sample Upload Section */}
-          <SectionCard title="Upload Voice Sample" icon={<Mic className="text-primary" />}>
+          <SectionCard title="Upload Voice Sample (for future use)" icon={<Mic className="text-primary" />}>
             <div className="space-y-4">
               <Label htmlFor="voice-sample-input" className="text-base">Upload a voice sample (e.g., .wav, .mp3):</Label>
               <Input
@@ -193,7 +206,7 @@ export default function Home() {
                 )}
               </Button>
               <p className="text-sm text-muted-foreground">
-                Upload your voice samples here for future voice cloning capabilities. Currently mocked.
+                Upload your voice samples here. Voice cloning functionality is not yet implemented. This section is for demonstrating future capabilities.
               </p>
             </div>
           </SectionCard>

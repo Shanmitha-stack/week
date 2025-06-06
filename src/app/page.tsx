@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import { Text, Mic, Loader2, UploadCloud } from 'lucide-react';
+import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 
 export default function Home() {
   const [textInput, setTextInput] = useState<string>('');
@@ -29,13 +30,29 @@ export default function Home() {
       return;
     }
     setIsGeneratingSpeech(true);
-    setGeneratedAudioSrc(null); // Clear previous audio
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    // Mock TTS: Use a placeholder audio file
-    setGeneratedAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3");
-    setIsGeneratingSpeech(false);
-    toast({ title: "Speech Generated", description: "Your text has been converted to speech." });
+    setGeneratedAudioSrc(null); 
+
+    try {
+      const { preparedText } = await prepareTextForSpeech({ text: textInput });
+      console.log("Prepared text for TTS:", preparedText); // For demonstration
+
+      // Simulate API call for actual TTS audio generation using 'preparedText'
+      // In a real scenario, 'preparedText' would be sent to a TTS service.
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Shorter delay as Genkit call takes time
+      
+      setGeneratedAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"); // Still using mock audio
+      
+      toast({ 
+        title: "Speech Ready", 
+        description: "Text processed for speech. Audio generation is currently mocked." 
+      });
+
+    } catch (error) {
+      console.error("Error in text-to-speech process:", error);
+      toast({ title: "Error", description: "Failed to process text for speech.", variant: "destructive" });
+    } finally {
+      setIsGeneratingSpeech(false);
+    }
   };
 
   const handleVoiceSampleChange = (event: ChangeEvent<HTMLInputElement>) => {

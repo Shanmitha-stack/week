@@ -8,7 +8,7 @@ body {
 
 @layer base {
   :root {
-    --background: 220 17% 95%; /* Light Grey #F0F2F5 */
+    --background: 120 60% 95%; /* Light Green */
     --foreground: 240 10% 3.9%; /* Default dark text */
     --card: 220 17% 100%; /* Slightly whiter than background for cards */
     --card-foreground: 240 10% 3.9%;
@@ -45,7 +45,7 @@ body {
   }
 
   .dark {
-    --background: 220 15% 10%; /* Dark Grey */
+    --background: 120 60% 10%; /* Dark Green */
     --foreground: 220 15% 95%; /* Light grey text */
     --card: 220 15% 12%;
     --card-foreground: 220 15% 95%;

@@ -229,7 +229,7 @@ export default function Home() {
                         onClick={handleSpeakPreparedText}
                         variant="outline"
                         size="sm"
-                        disabled={isGeneratingSpeech}
+                        disabled={isGeneratingSpeech} 
                       >
                         {isSpeaking ? (
                           <>

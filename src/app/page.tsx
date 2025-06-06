@@ -17,6 +17,7 @@ import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 export default function Home() {
   const [textInput, setTextInput] = useState<string>('');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
   
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -55,6 +56,7 @@ export default function Home() {
       return;
     }
     setIsGeneratingSpeech(true);
+    setAudioSrc(null); // Clear previous audio
 
     let imageDataUri: string | undefined = undefined;
     if (selectedImage) {
@@ -74,10 +76,14 @@ export default function Home() {
       const { preparedText } = await prepareTextForSpeech({ text: currentText, imageDataUri });
       console.log("Prepared text for TTS:", preparedText);
       
+      // Simulate TTS generation and provide a mock audio source
+      // In a real app, you would call a TTS service here and get an audio URL or data
+      // For now, we'll use a toast notification.
       toast({ 
         title: "Input Processed", 
-        description: "Your input has been prepared for speech. Actual audio generation is not currently available." 
+        description: `Your input has been prepared: "${preparedText}". Actual audio generation is not currently available.` 
       });
+      // setAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"); // Mock audio source
 
     } catch (error) {
       console.error("Error in text-to-speech process:", error);
@@ -102,6 +108,7 @@ export default function Home() {
       return;
     }
     setIsUploadingSample(true);
+    // Simulate upload
     await new Promise(resolve => setTimeout(resolve, 1500));
     setIsUploadingSample(false);
     toast({ title: "Sample Uploaded (Mock)", description: "Voice sample upload would be handled here." });
@@ -116,7 +123,7 @@ export default function Home() {
           <SectionCard title="Text & Image to Speech Preparation" icon={<Text className="text-primary" />}>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="text-input" className="text-base">Enter your text (optional if image provided):</Label>
+                <Label htmlFor="text-input" className="text-base">Enter your text:</Label>
                 <Textarea
                   id="text-input"
                   value={textInput}
@@ -163,6 +170,12 @@ export default function Home() {
                   "Process Input for Speech"
                 )}
               </Button>
+              {/* {audioSrc && !isGeneratingSpeech && (
+                <div className="mt-4">
+                  <Label className="text-base block mb-2">Generated Speech:</Label>
+                  <AudioPlayer src={audioSrc} autoPlay={false} />
+                </div>
+              )} */}
             </div>
           </SectionCard>
 

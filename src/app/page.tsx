@@ -17,7 +17,7 @@ import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 export default function Home() {
   const [textInput, setTextInput] = useState<string>('');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
-  // const [audioSrc, setAudioSrc] = useState<string | null>(null); // Audio generation is mocked
+  const [audioSrc, setAudioSrc] = useState<string | null>(null); 
   
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export default function Home() {
       return;
     }
     setIsGeneratingSpeech(true);
-    // setAudioSrc(null); // Clear previous audio, though it's mocked
+    setAudioSrc(null); 
 
     let imageDataUri: string | undefined = undefined;
     if (selectedImage) {
@@ -75,10 +75,11 @@ export default function Home() {
       console.log("Prepared text for TTS:", preparedText);
       
       toast({ 
-        title: "Input Processed", 
-        description: `Text prepared for speech: "${preparedText}". Image content (if any) was not described. Actual audio generation is not currently available.` 
+        title: "Input Processed for Speech", 
+        description: `Text prepared: "${preparedText}". Image content (if any) was not described. Actual TTS audio generation is not available. A sample audio will play to demonstrate the player.`,
+        duration: 8000, 
       });
-      // setAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"); // Mock audio source removed
+      setAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"); 
 
     } catch (error) {
       console.error("Error in text-to-speech process:", error);
@@ -165,6 +166,13 @@ export default function Home() {
                   "Process Input for Speech"
                 )}
               </Button>
+
+              {audioSrc && (
+                <div className="mt-4">
+                  <Label className="text-base mb-2 block">Generated Audio (Sample):</Label>
+                  <AudioPlayer src={audioSrc} autoPlay={true}/>
+                </div>
+              )}
             </div>
           </SectionCard>
 
@@ -208,4 +216,3 @@ export default function Home() {
     </div>
   );
 }
-

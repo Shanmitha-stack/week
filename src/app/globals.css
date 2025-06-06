@@ -9,7 +9,7 @@ body {
 @layer base {
   :root {
     --background: 120 60% 95%; /* Light Green */
-    --foreground: 240 10% 3.9%; /* Default dark text */
+    --foreground: 250 50% 60%; /* Lavender for light theme text */
     --card: 220 17% 100%; /* Slightly whiter than background for cards */
     --card-foreground: 240 10% 3.9%;
     --popover: 220 17% 100%;
@@ -46,7 +46,7 @@ body {
 
   .dark {
     --background: 120 60% 10%; /* Dark Green */
-    --foreground: 220 15% 95%; /* Light grey text */
+    --foreground: 250 70% 85%; /* Lighter Lavender for dark theme text */
     --card: 220 15% 12%;
     --card-foreground: 220 15% 95%;
     --popover: 220 15% 12%;

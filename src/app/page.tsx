@@ -14,7 +14,7 @@ import { Text, Mic, Loader2, UploadCloud, ImagePlus } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 
 export default function Home() {
-  const [textInput, setTextInput] = useState<string>('generate this text into speech');
+  const [textInput, setTextInput] = useState<string>('');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
   
   const [selectedImage, setSelectedImage] = useState<File | null>(null);

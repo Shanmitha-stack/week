@@ -34,17 +34,19 @@ export default function Home() {
 
     try {
       const { preparedText } = await prepareTextForSpeech({ text: textInput });
-      console.log("Prepared text for TTS:", preparedText); // For demonstration
+      console.log("Prepared text for TTS:", preparedText);
 
       // Simulate API call for actual TTS audio generation using 'preparedText'
       // In a real scenario, 'preparedText' would be sent to a TTS service.
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Shorter delay as Genkit call takes time
+      // For now, we are only preparing the text. Actual audio synthesis is not implemented.
+      await new Promise(resolve => setTimeout(resolve, 500)); 
       
-      setGeneratedAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"); // Still using mock audio
+      // No audio source is set, as actual TTS is not implemented.
+      // setGeneratedAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"); 
       
       toast({ 
-        title: "Speech Ready", 
-        description: "Text processed for speech. Audio generation is currently mocked." 
+        title: "Text Processed", 
+        description: "Your text has been prepared for speech. Actual audio generation is not currently available." 
       });
 
     } catch (error) {
@@ -97,15 +99,15 @@ export default function Home() {
                 {isGeneratingSpeech ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Generating...
+                    Processing...
                   </>
                 ) : (
-                  "Convert to Speech"
+                  "Process Text for Speech"
                 )}
               </Button>
               {generatedAudioSrc && (
                 <div className="mt-4">
-                  <AudioPlayer src={generatedAudioSrc} autoPlay={true} />
+                  <AudioPlayer src={generatedAudioSrc} autoPlay={false} />
                 </div>
               )}
             </div>

@@ -95,16 +95,49 @@ export default function Home() {
       const { preparedText } = await prepareTextForSpeech({ text: textInput, imageDataUri });
       setPreparedSpeechText(preparedText);
       
-      toast({ 
-        title: "Input Processed for Speech", 
-        description: `The text has been refined by AI and is shown below. ${isSpeechSupported ? "You can now use the 'Speak' button to hear it." : "Browser speech synthesis is not supported."}`,
-        duration: 6000, 
-      });
+      const shouldSpeak = preparedText && 
+                          preparedText.trim() !== "" && 
+                          !preparedText.toLowerCase().startsWith("no text was provided") && 
+                          !preparedText.toLowerCase().startsWith("error:");
+
+      if (isSpeechSupported && shouldSpeak) {
+        const utterance = new SpeechSynthesisUtterance(preparedText);
+        utterance.onstart = () => {
+          setIsSpeaking(true);
+        };
+        utterance.onend = () => {
+          setIsSpeaking(false);
+        };
+        utterance.onerror = (event) => {
+          console.error("Speech synthesis error:", event);
+          toast({ title: "Speech Error", description: "Could not play speech automatically. You can try the 'Speak' button.", variant: "destructive" });
+          setIsSpeaking(false);
+        };
+        window.speechSynthesis.speak(utterance);
+        toast({
+          title: "Processing Complete",
+          description: "Speaking the prepared text...",
+          duration: 3000,
+        });
+      } else if (shouldSpeak) { // Speech not supported, but text is speakable
+        toast({
+          title: "Input Processed",
+          description: `Prepared text: "${preparedText.substring(0,100)}${preparedText.length > 100 ? '...' : ''}". Browser speech synthesis not supported.`,
+          duration: 6000,
+        });
+      } else { // Text is not speakable (e.g., "No text was provided..." or an error caught by AI)
+        toast({
+          title: "Input Processed",
+          description: preparedText || "An issue occurred while preparing text.", 
+          duration: 6000,
+        });
+      }
 
     } catch (error) {
       console.error("Error in text-to-speech process:", error);
-      setPreparedSpeechText("Error: Could not process input for speech.");
-      toast({ title: "Error", description: "Failed to process input for speech. See details below.", variant: "destructive" });
+      const errorMessage = "Error: Could not process input for speech.";
+      setPreparedSpeechText(errorMessage);
+      toast({ title: "Error", description: errorMessage, variant: "destructive" });
     } finally {
       setIsGeneratingSpeech(false);
     }
@@ -122,7 +155,7 @@ export default function Home() {
       return;
     }
 
-    if (preparedSpeechText && preparedSpeechText.trim() !== "") {
+    if (preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("error:") && !preparedSpeechText.toLowerCase().startsWith("no text was provided")) {
       const utterance = new SpeechSynthesisUtterance(preparedSpeechText);
       utterance.onstart = () => {
         setIsSpeaking(true);
@@ -137,7 +170,7 @@ export default function Home() {
       };
       window.speechSynthesis.speak(utterance);
     } else {
-      toast({ title: "Nothing to Speak", description: "There is no prepared text to speak.", variant: "default" });
+      toast({ title: "Nothing to Speak", description: "There is no suitable prepared text to speak.", variant: "default" });
     }
   }, [preparedSpeechText, isSpeaking, isSpeechSupported, toast]);
 
@@ -224,7 +257,7 @@ export default function Home() {
                 <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">
                   <div className="flex justify-between items-center mb-2">
                     <Label className="text-lg font-semibold text-foreground">Prepared Text for Speech:</Label>
-                    {isSpeechSupported && preparedSpeechText.trim() !== "" && (
+                    {isSpeechSupported && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("error:") && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && (
                       <Button
                         onClick={handleSpeakPreparedText}
                         variant="outline"
@@ -246,9 +279,9 @@ export default function Home() {
                     )}
                   </div>
                   <p className="text-base whitespace-pre-wrap text-foreground/90">{preparedSpeechText}</p>
-                   {!isSpeechSupported && preparedSpeechText.trim() !== "" && (
+                   {!isSpeechSupported && preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("error:") && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && (
                     <p className="mt-3 text-sm text-muted-foreground italic">
-                      Your browser does not support speech synthesis.
+                      Your browser does not support speech synthesis. You can use the 'Speak' button if it becomes available.
                     </p>
                   )}
                 </div>

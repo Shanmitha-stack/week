@@ -216,7 +216,7 @@ export default function Home() {
                     Processing Input...
                   </>
                 ) : (
-                  "green color"
+                  "Process Input for Speech"
                 )}
               </Button>
 

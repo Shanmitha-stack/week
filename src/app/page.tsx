@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, ChangeEvent, useEffect } from 'react';
@@ -74,7 +75,7 @@ export default function Home() {
     await new Promise(resolve => setTimeout(resolve, 2000));
     // For now, mock success, no actual OCR/TTS from image
     setIsProcessingImage(false);
-    toast({ title: "Image Processed (Mock)", description: "Image processing and speech synthesis would occur here." });
+    toast({ title: "Image Processed (Mock)", description: "Image processing (mocked). No speech conversion." });
   };
 
   const handleVoiceSampleChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -134,7 +135,7 @@ export default function Home() {
           </SectionCard>
 
           {/* Image Input Section */}
-          <SectionCard title="Image-to-Speech (OCR)" icon={<ImageIcon className="text-primary" />}>
+          <SectionCard title="dont convert image to speech" icon={<ImageIcon className="text-primary" />}>
             <div className="space-y-4">
               <Label htmlFor="image-input" className="text-base">Upload an image:</Label>
               <Input
@@ -163,11 +164,11 @@ export default function Home() {
                     Processing Image...
                   </>
                 ) : (
-                  "Extract Text & Convert to Speech"
+                  "Process Image"
                 )}
               </Button>
               <p className="text-sm text-muted-foreground">
-                This feature would use OCR to extract text from the image and then convert it to speech. Currently mocked.
+                Upload an image to be processed. This section does not convert images to speech. Image processing is currently mocked.
               </p>
             </div>
           </SectionCard>
@@ -212,3 +213,5 @@ export default function Home() {
     </div>
   );
 }
+
+    

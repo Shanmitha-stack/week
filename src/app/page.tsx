@@ -14,7 +14,7 @@ import { Text, Mic, Loader2, UploadCloud, ImagePlus } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 
 export default function Home() {
-  const [textInput, setTextInput] = useState<string>('');
+  const [textInput, setTextInput] = useState<string>('generate this text into speech');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
   
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -55,7 +55,7 @@ export default function Home() {
       return;
     }
     setIsGeneratingSpeech(true);
-    setPreparedSpeechText(null); // Clear previous results
+    setPreparedSpeechText(null); 
 
     let imageDataUri: string | undefined = undefined;
     if (selectedImage) {
@@ -75,7 +75,7 @@ export default function Home() {
       
       toast({ 
         title: "Input Processed for Speech", 
-        description: `Text prepared and shown below. Image content (if any) was not described. Actual TTS audio generation is not available.`,
+        description: `The text has been refined by AI and is shown below. Image content (if any) was not used for the speech text. Actual audio generation is not available.`,
         duration: 8000, 
       });
 

@@ -11,30 +11,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, Image as ImageIcon, Mic, Loader2, UploadCloud } from 'lucide-react';
+import { Text, Mic, Loader2, UploadCloud } from 'lucide-react';
 
 export default function Home() {
   const [textInput, setTextInput] = useState<string>('');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
   const [generatedAudioSrc, setGeneratedAudioSrc] = useState<string | null>(null);
 
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [isProcessingImage, setIsProcessingImage] = useState<boolean>(false);
-
   const [selectedVoiceSample, setSelectedVoiceSample] = useState<File | null>(null);
   const [isUploadingSample, setIsUploadingSample] = useState<boolean>(false);
 
   const { toast } = useToast();
-
-  useEffect(() => {
-    // Clean up image preview URL when component unmounts or image changes
-    return () => {
-      if (imagePreviewUrl) {
-        URL.revokeObjectURL(imagePreviewUrl);
-      }
-    };
-  }, [imagePreviewUrl]);
 
   const handleTextToSpeech = async () => {
     if (!textInput.trim()) {
@@ -49,33 +36,6 @@ export default function Home() {
     setGeneratedAudioSrc("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3");
     setIsGeneratingSpeech(false);
     toast({ title: "Speech Generated", description: "Your text has been converted to speech." });
-  };
-
-  const handleImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setSelectedImage(file);
-      if (imagePreviewUrl) {
-        URL.revokeObjectURL(imagePreviewUrl);
-      }
-      setImagePreviewUrl(URL.createObjectURL(file));
-    } else {
-      setSelectedImage(null);
-      setImagePreviewUrl(null);
-    }
-  };
-
-  const handleProcessImage = async () => {
-    if (!selectedImage) {
-      toast({ title: "Image Required", description: "Please select an image to process.", variant: "destructive" });
-      return;
-    }
-    setIsProcessingImage(true);
-    // Simulate API call for OCR and TTS
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    // For now, mock success, no actual OCR/TTS from image
-    setIsProcessingImage(false);
-    toast({ title: "Image Processed (Mock)", description: "Image processing (mocked). No speech conversion." });
   };
 
   const handleVoiceSampleChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -134,45 +94,6 @@ export default function Home() {
             </div>
           </SectionCard>
 
-          {/* Image Input Section */}
-          <SectionCard title="dont convert image to speech" icon={<ImageIcon className="text-primary" />}>
-            <div className="space-y-4">
-              <Label htmlFor="image-input" className="text-base">Upload an image:</Label>
-              <Input
-                id="image-input"
-                type="file"
-                accept="image/*"
-                onChange={handleImageFileChange}
-                className="text-base file:text-primary file:font-medium"
-              />
-              {imagePreviewUrl && (
-                <div className="mt-2 border rounded-md p-2 inline-block bg-muted">
-                  <Image
-                    src={imagePreviewUrl}
-                    alt="Selected image preview"
-                    width={200}
-                    height={150}
-                    className="rounded-md object-contain max-h-[150px]"
-                    data-ai-hint="document content"
-                  />
-                </div>
-              )}
-              <Button onClick={handleProcessImage} disabled={isProcessingImage || !selectedImage} className="w-full sm:w-auto">
-                {isProcessingImage ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing Image...
-                  </>
-                ) : (
-                  "Process Image"
-                )}
-              </Button>
-              <p className="text-sm text-muted-foreground">
-                Upload an image to be processed. This section does not convert images to speech. Image processing is currently mocked.
-              </p>
-            </div>
-          </SectionCard>
-
           {/* Voice Sample Upload Section */}
           <SectionCard title="Upload Voice Sample" icon={<Mic className="text-primary" />}>
             <div className="space-y-4">
@@ -213,5 +134,3 @@ export default function Home() {
     </div>
   );
 }
-
-    

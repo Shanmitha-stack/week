@@ -221,7 +221,7 @@ export default function Home() {
     toast({ title: "Animating Face (Mock)", description: "This is a placeholder. In a real app, this would call a lip-sync service." });
     await new Promise(resolve => setTimeout(resolve, 2500)); 
 
-    const preparedTextSnippet = preparedSpeechText.substring(0, 70) + (preparedSpeechText.length > 70 ? '...' : '');
+    const preparedTextSnippet = preparedSpeechText!.substring(0, 70) + (preparedSpeechText!.length > 70 ? '...' : '');
     let voiceSampleInfo = '';
     if (selectedVoiceSample) {
       voiceSampleInfo = ` with custom voice from "${selectedVoiceSample.name}"`;
@@ -312,7 +312,7 @@ export default function Home() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Lip Sync &amp; Face Animation (Week 2)" icon={<Smile className="text-primary" />} >
+          <SectionCard title="Week 2: Face Preprocessing + Lip Sync Video (Audio + Image → Talking Face)" icon={<Smile className="text-primary" />} >
             <div className="space-y-4">
               <div>
                 <Label htmlFor="static-face-image-input" className="text-base">Upload a static face image:</Label>

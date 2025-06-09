@@ -324,9 +324,9 @@ export default function Home() {
 
 
  const handleCloneVoiceAndSynthesize = async () => {
-    setIsCloningVoice(true); // Set loading state for the button
     // This toast should appear immediately
     toast({ title: "Mock Voice Cloning", description: "Initializing voice cloning process..." });
+    setIsCloningVoice(true); // Set loading state for the button
 
     console.log('[handleCloneVoiceAndSynthesize] Initiated.');
     console.log('[handleCloneVoiceAndSynthesize] Selected voice sample:', selectedVoiceSample?.name);
@@ -644,6 +644,7 @@ export default function Home() {
                   onChange={handleVoiceSampleChange}
                   className="text-base mt-1 file:text-primary file:font-medium"
                 />
+                 <p className="text-xs text-muted-foreground mt-1 italic">Note: This uploaded sample is for simulation purposes. Playback will use a standard browser voice, not the uploaded sample's voice.</p>
                 {selectedVoiceSample && (
                   <p className="text-sm text-muted-foreground mt-1">Selected file: {selectedVoiceSample.name}</p>
                 )}
@@ -794,3 +795,4 @@ export default function Home() {
     </div>
   );
 }
+

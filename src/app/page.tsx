@@ -486,6 +486,14 @@ export default function Home() {
 
   const anyLoading = isGeneratingSpeech || isCloningVoice || isAnimatingFace;
 
+  const hasPreparedTextAudio = preparedSpeechText &&
+                             preparedSpeechText.trim() !== "" &&
+                             !preparedSpeechText.toLowerCase().startsWith("no text was provided") &&
+                             !preparedSpeechText.toLowerCase().startsWith("error:");
+  const hasSimulatedClonedAudio = !!textForSimulatedClonedVoice;
+  const isAudioAvailableForAnimation = hasPreparedTextAudio || hasSimulatedClonedAudio;
+
+
   const handleAnimateFace = useCallback(async () => {
     console.log('[handleAnimateFace] Initiated.');
     if (!selectedImage) { 
@@ -494,18 +502,17 @@ export default function Home() {
       return;
     }
     
-    const currentTextForSimulatedVal = textForSimulatedClonedVoiceRef.current; 
-    const currentPreparedTextIsUsableVal = isPreparedTextUsable(); 
-    const currentPreparedSpeechTextVal = preparedSpeechTextRef.current; 
+    const audioSourceForAnimation = textForSimulatedClonedVoice // Use direct state
+      ? "simulated cloned audio"
+      : (hasPreparedTextAudio ? "prepared speech text" : null);
 
-    const audioSourceText = currentTextForSimulatedVal ? "simulated cloned audio" : (currentPreparedTextIsUsableVal ? "prepared speech text" : null);
-    console.log('[handleAnimateFace] Determined audioSourceText:', audioSourceText);
-    console.log('[handleAnimateFace] textForSimulatedClonedVoice (from ref):', currentTextForSimulatedVal);
-    console.log('[handleAnimateFace] isPreparedTextUsable():', currentPreparedTextIsUsableVal);
-    console.log('[handleAnimateFace] preparedSpeechText (at animation start, from ref):', currentPreparedSpeechTextVal);
+    console.log('[handleAnimateFace] Determined audioSourceForAnimation:', audioSourceForAnimation);
+    console.log('[handleAnimateFace] textForSimulatedClonedVoice (state):', textForSimulatedClonedVoice);
+    console.log('[handleAnimateFace] hasPreparedTextAudio (derived state):', hasPreparedTextAudio);
+    console.log('[handleAnimateFace] preparedSpeechText (state at animation start):', preparedSpeechText);
 
 
-    if (!audioSourceText) {
+    if (!audioSourceForAnimation) {
        toast({ title: "Audio Source Required", description: "Audio source required. Please use 'Process Input for Speech' or 'Generate Speech with Cloned Voice (Mock)' first, then try animating.", variant: "destructive" });
        console.log('[handleAnimateFace] Aborted: No audio source text available (neither prepared text nor simulated cloned audio).');
       return;
@@ -527,19 +534,19 @@ export default function Home() {
       toast({ title: "Starting Animation Process", description: "Preprocessing face image..." });
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      toast({ title: "Processing Animation", description: `Generating lip-sync video with ${audioSourceText}...` });
+      toast({ title: "Processing Animation", description: `Generating lip-sync video with ${audioSourceForAnimation}...` });
       await new Promise(resolve => setTimeout(resolve, 2500));
 
-      const audioContextMessageSegment = currentTextForSimulatedVal
-        ? `simulated cloned audio based on text: "${currentTextForSimulatedVal.substring(0,70)}..."`
-        : (currentPreparedTextIsUsableVal && currentPreparedSpeechTextVal ? `prepared speech: "${currentPreparedSpeechTextVal.substring(0, 70)}..."` : "available audio context");
+      const audioContextMessageSegment = textForSimulatedClonedVoice
+        ? `simulated cloned audio based on text: "${textForSimulatedClonedVoice.substring(0,70)}..."`
+        : (hasPreparedTextAudio && preparedSpeechText ? `prepared speech: "${preparedSpeechText.substring(0, 70)}..."` : "available audio context");
 
       let voiceInfoSegment = '';
-      if (currentTextForSimulatedVal && selectedVoiceSample) {
+      if (textForSimulatedClonedVoice && selectedVoiceSample) {
         voiceInfoSegment = ` (simulated with custom voice from "${selectedVoiceSample.name}")`;
-      } else if (currentPreparedTextIsUsableVal && selectedVoiceSample) { 
+      } else if (hasPreparedTextAudio && selectedVoiceSample) { 
         voiceInfoSegment = ` (standard browser TTS used, voice sample "${selectedVoiceSample.name}" was noted)`;
-      } else if (currentPreparedTextIsUsableVal) { 
+      } else if (hasPreparedTextAudio) { 
         voiceInfoSegment = ` (standard browser TTS used)`;
       }
 
@@ -562,7 +569,7 @@ export default function Home() {
       setIsAnimatingFace(false);
       console.log('[handleAnimateFace] Completed. isAnimatingFace set to false.');
     }
-  }, [selectedImage, imagePreview, isSpeechSupported, toast, anyLoading, isPreparedTextUsable, handleSpeakPreparedText, handlePlaySimulatedClonedVoice, selectedVoiceSample]);
+  }, [selectedImage, imagePreview, toast, preparedSpeechText, textForSimulatedClonedVoice, selectedVoiceSample, hasPreparedTextAudio]);
 
   const currentPreparedTextIsSpeaking = isSpeaking && speakingText === preparedSpeechText && preparedSpeechText !== null;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoice !== null;
@@ -728,7 +735,7 @@ export default function Home() {
 
               <Button
                 onClick={handleAnimateFace}
-                disabled={anyLoading || !selectedImage || (!isPreparedTextUsable() && !textForSimulatedClonedVoiceRef.current)}
+                disabled={anyLoading || !selectedImage || !isAudioAvailableForAnimation}
                 className="w-full sm:w-auto"
               >
                 {isAnimatingFace ? (
@@ -774,12 +781,12 @@ export default function Home() {
                 {!isAnimatingFace && animatedVideoResult && (
                   <div className="mt-3 space-y-2">
                     <p className="text-sm whitespace-pre-wrap text-foreground/80 bg-background/50 p-3 rounded-md shadow-sm">{animatedVideoResult}</p>
-                    {!textForSimulatedClonedVoice && isPreparedTextUsable() && isSpeechSupported && (
+                    {!textForSimulatedClonedVoice && hasPreparedTextAudio && isSpeechSupported && (
                        <Button
                          onClick={handleSpeakPreparedText}
                          variant="outline"
                          size="sm"
-                         disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!currentPreparedTextIsSpeaking && !isPreparedTextUsable()) }
+                         disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!currentPreparedTextIsSpeaking && !hasPreparedTextAudio) }
                         >
                         {currentPreparedTextIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Animation Audio (TTS)</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (TTS)</>}
                       </Button>
@@ -810,7 +817,3 @@ export default function Home() {
     </div>
   );
 }
-
-
-    
-

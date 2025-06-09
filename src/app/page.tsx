@@ -3,7 +3,7 @@
 
 import React, { useState, ChangeEvent, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { useSearchParams } from 'next/navigation'; // Import useSearchParams
+import { useSearchParams } from 'next/navigation'; 
 import AppHeader from '@/components/AppHeader';
 import SectionCard from '@/components/SectionCard';
 import AudioPlayer from '@/components/AudioPlayer';
@@ -16,7 +16,7 @@ import { Text, Mic, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle, Smile,
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 
 export default function Home() {
-  const searchParams = useSearchParams(); // Explicitly use the hook
+  const searchParams = useSearchParams(); 
 
   const [textInput, setTextInput] = useState<string>('');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
@@ -209,12 +209,13 @@ export default function Home() {
     }
 
     setIsCloningVoice(true);
-    setClonedAudioUrl(null);
+    setClonedAudioUrl(null); 
     setAnimatedVideoResult(null); 
     setMockVideoPlayerImage(null);
+    
+    toast({ title: "Mock Voice Cloning", description: "Initializing voice cloning process..." });
 
     try {
-      toast({ title: "Mock Voice Cloning", description: "Initializing voice cloning process..." });
       await new Promise(resolve => setTimeout(resolve, 1000));
       toast({ title: "Mock Voice Cloning", description: "Processing voice sample..." });
       await new Promise(resolve => setTimeout(resolve, 1500));
@@ -277,7 +278,10 @@ export default function Home() {
       if (clonedAudioUrl && selectedVoiceSample) {
         voiceInfo = ` with custom cloned voice from "${selectedVoiceSample.name}"`;
       } else if (isPreparedTextUsable && selectedVoiceSample) {
-        voiceInfo = ` (standard browser TTS used, voice sample "${selectedVoiceSample.name}" available for context if backend supported it)`;
+        // This case implies standard TTS was used for speech, but a voice sample was available for context
+        // if the backend *had* supported using it directly with a non-cloned TTS.
+        // For a mock, we simplify: if clonedAudioUrl is not set, we assume standard TTS for animation audio.
+        voiceInfo = ` (standard browser TTS used, voice sample "${selectedVoiceSample.name}" was available for context)`;
       } else if (isPreparedTextUsable) {
         voiceInfo = ` (standard browser TTS used)`;
       }
@@ -363,8 +367,8 @@ export default function Home() {
                   <div className="flex justify-between items-center mb-2">
                     <Label className="text-lg font-semibold text-foreground">Prepared Text for Speech:</Label>
                     {isSpeechSupported && isPreparedTextUsable && (
-                      <Button onClick={handleSpeakPreparedText} variant="outline" size="sm" disabled={anyLoading || isSpeaking}>
-                        {isSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
+                      <Button onClick={handleSpeakPreparedText} variant="outline" size="sm" disabled={anyLoading || (isSpeaking && preparedSpeechText === window.speechSynthesis?.getUtterances()[0]?.text) }>
+                        {isSpeaking && preparedSpeechText === window.speechSynthesis?.getUtterances()[0]?.text ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
                       </Button>
                     )}
                   </div>
@@ -416,8 +420,11 @@ export default function Home() {
                 </div>
               )}
               <p className="text-sm text-muted-foreground pt-2">
-                This section demonstrates the UI for voice cloning. Upload a voice sample and ensure text is prepared in the section above. 
-                The "Generate Speech" button simulates a backend voice cloning process and displays a placeholder audio player. Actual voice cloning is not implemented.
+                This section demonstrates the UI for voice cloning. 
+                1. First, prepare text using the "Process Input for Speech" button in the section above. 
+                2. Then, upload a voice sample here. 
+                3. Finally, click the "Generate Speech with Cloned Voice (Mock)" button. 
+                This simulates a backend voice cloning process and displays a placeholder audio player. Actual voice cloning is not implemented.
               </p>
             </div>
           </SectionCard>
@@ -497,8 +504,8 @@ export default function Home() {
                   <div className="mt-3 space-y-2">
                     <p className="text-sm whitespace-pre-wrap text-foreground/80 bg-background/50 p-3 rounded-md shadow-sm">{animatedVideoResult}</p>
                     {!clonedAudioUrl && isPreparedTextUsable && isSpeechSupported && (
-                       <Button onClick={handleSpeakPreparedText} variant="outline" size="sm" disabled={anyLoading || isSpeaking}>
-                        {isSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking Animation Audio</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (TTS)</>}
+                       <Button onClick={handleSpeakPreparedText} variant="outline" size="sm" disabled={anyLoading || (isSpeaking && preparedSpeechText === window.speechSynthesis?.getUtterances()[0]?.text) }>
+                        {isSpeaking && preparedSpeechText === window.speechSynthesis?.getUtterances()[0]?.text ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking Animation Audio</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (TTS)</>}
                       </Button>
                     )}
                     {clonedAudioUrl && (

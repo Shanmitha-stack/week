@@ -39,7 +39,6 @@ export default function Home() {
       setIsSpeechSupported(true);
     }
     return () => {
-      // Ensure speech synthesis is available and in a state where cancel is meaningful
       if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
         if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
           window.speechSynthesis.cancel();
@@ -182,7 +181,7 @@ export default function Home() {
       return;
     }
     setIsUploadingSample(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Mock upload
     setIsUploadingSample(false);
     toast({ title: "Sample Uploaded (Mock)", description: "Voice sample upload would be handled here. Voice cloning is not yet implemented." });
   };
@@ -222,7 +221,13 @@ export default function Home() {
     toast({ title: "Animating Face (Mock)", description: "This is a placeholder. In a real app, this would call a lip-sync service." });
     await new Promise(resolve => setTimeout(resolve, 2500)); 
 
-    const mockVideoOutput = `Animation complete using "${staticFaceImage.name}" with audio: "${preparedSpeechText.substring(0, 70)}${preparedSpeechText.length > 70 ? '...' : ''}". The animated video would be displayed here. (Mock Output)`;
+    const preparedTextSnippet = preparedSpeechText.substring(0, 70) + (preparedSpeechText.length > 70 ? '...' : '');
+    let voiceSampleInfo = '';
+    if (selectedVoiceSample) {
+      voiceSampleInfo = ` with custom voice from "${selectedVoiceSample.name}"`;
+    }
+
+    const mockVideoOutput = `Animation using face image "${staticFaceImage.name}", prepared speech: "${preparedTextSnippet}"${voiceSampleInfo}. The animated video would be displayed here. (Mock Output)`;
     setAnimatedVideoResult(mockVideoOutput);
 
     setIsAnimatingFace(false);

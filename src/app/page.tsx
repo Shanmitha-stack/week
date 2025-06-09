@@ -3,6 +3,7 @@
 
 import React, { useState, ChangeEvent, useEffect, useCallback } from 'react';
 import Image from 'next/image';
+import { useSearchParams } from 'next/navigation'; // Import useSearchParams
 import AppHeader from '@/components/AppHeader';
 import SectionCard from '@/components/SectionCard';
 import AudioPlayer from '@/components/AudioPlayer';
@@ -15,6 +16,8 @@ import { Text, Mic, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle, Smile,
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 
 export default function Home() {
+  const searchParams = useSearchParams(); // Explicitly use the hook
+
   const [textInput, setTextInput] = useState<string>('');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
   
@@ -274,7 +277,9 @@ export default function Home() {
       if (clonedAudioUrl && selectedVoiceSample) {
         voiceInfo = ` with custom cloned voice from "${selectedVoiceSample.name}"`;
       } else if (isPreparedTextUsable && selectedVoiceSample) {
-        voiceInfo = ` (using standard TTS, voice sample "${selectedVoiceSample.name}" provided for context if backend supported it)`;
+        // If clonedAudioUrl is not set but a voice sample exists, it means mock cloning wasn't run or didn't "succeed" for this animation path.
+        // We imply standard TTS would be used, but mention the sample for context if backend *were* to use it.
+        voiceInfo = ` (standard browser TTS used, voice sample "${selectedVoiceSample.name}" available for context if backend supported it)`;
       } else if (isPreparedTextUsable) {
         voiceInfo = ` (standard browser TTS used)`;
       }
@@ -295,6 +300,7 @@ export default function Home() {
   };
 
   const canAnimateFace = staticFaceImage && (isPreparedTextUsable || clonedAudioUrl);
+  const anyLoading = isGeneratingSpeech || isCloningVoice || isAnimatingFace;
 
 
   return (
@@ -347,7 +353,7 @@ export default function Home() {
                   </div>
                 )}
               </div>
-              <Button onClick={handleTextToSpeech} disabled={isGeneratingSpeech || isCloningVoice || isAnimatingFace} className="w-full sm:w-auto">
+              <Button onClick={handleTextToSpeech} disabled={anyLoading} className="w-full sm:w-auto">
                 {isGeneratingSpeech ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing Input...</>
                 ) : (
@@ -359,7 +365,7 @@ export default function Home() {
                   <div className="flex justify-between items-center mb-2">
                     <Label className="text-lg font-semibold text-foreground">Prepared Text for Speech:</Label>
                     {isSpeechSupported && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("error:") && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && (
-                      <Button onClick={handleSpeakPreparedText} variant="outline" size="sm" disabled={isGeneratingSpeech || isCloningVoice || isAnimatingFace}>
+                      <Button onClick={handleSpeakPreparedText} variant="outline" size="sm" disabled={anyLoading || isSpeaking}>
                         {isSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
                       </Button>
                     )}
@@ -392,7 +398,7 @@ export default function Home() {
               </div>
               <Button 
                 onClick={handleCloneVoiceAndSynthesize} 
-                disabled={isCloningVoice || !selectedVoiceSample || !isPreparedTextUsable || isGeneratingSpeech || isAnimatingFace} 
+                disabled={anyLoading || !selectedVoiceSample || !isPreparedTextUsable} 
                 className="w-full sm:w-auto"
               >
                 {isCloningVoice ? (
@@ -446,7 +452,7 @@ export default function Home() {
 
               <Button 
                 onClick={handleAnimateFace} 
-                disabled={isAnimatingFace || !canAnimateFace || isGeneratingSpeech || isCloningVoice} 
+                disabled={anyLoading || !canAnimateFace} 
                 className="w-full sm:w-auto"
               >
                 {isAnimatingFace ? (
@@ -473,7 +479,7 @@ export default function Home() {
                     </div>
                   ) : mockVideoPlayerImage ? (
                     <Image
-                      key={mockVideoPlayerImage}
+                      key={mockVideoPlayerImage} 
                       src={mockVideoPlayerImage}
                       alt="Mock video placeholder"
                       width={640}
@@ -506,3 +512,4 @@ export default function Home() {
     </div>
   );
 }
+

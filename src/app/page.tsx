@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, ChangeEvent, useEffect, useCallback } from 'react';
+import React, { useState, ChangeEvent, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import AppHeader from '@/components/AppHeader';
@@ -14,6 +14,8 @@ import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import { Text, MicVocal, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
 
 export default function Home() {
   const searchParams = useSearchParams(); 
@@ -41,6 +43,9 @@ export default function Home() {
   const [isAnimatingFace, setIsAnimatingFace] = useState<boolean>(false);
   const [mockVideoPlayerImage, setMockVideoPlayerImage] = useState<string | null>(null);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+
 
   const { toast } = useToast();
 
@@ -64,8 +69,7 @@ export default function Home() {
           logVoices();
         };
       } else {
-        // Fallback for browsers that might not support onvoiceschanged consistently, or if voices load very quickly
-        setTimeout(logVoices, 500); // Log again after a short delay
+        setTimeout(logVoices, 500); 
       }
 
     } else {
@@ -78,19 +82,51 @@ export default function Home() {
          if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
           window.speechSynthesis.cancel();
         }
-        window.speechSynthesis.onvoiceschanged = null; // Clean up listener
+        window.speechSynthesis.onvoiceschanged = null; 
       }
       setIsSpeaking(false);
       setSpeakingText(null);
       setIsSimulatedClonedVoiceSpeaking(false);
     };
   }, []);
+  
+  useEffect(() => {
+    const getCameraPermission = async () => {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({video: true});
+          setHasCameraPermission(true);
+
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        } catch (error) {
+          console.error('Error accessing camera:', error);
+          setHasCameraPermission(false);
+          toast({
+            variant: 'destructive',
+            title: 'Camera Access Denied',
+            description: 'Please enable camera permissions in your browser settings to use this app.',
+          });
+        }
+      } else {
+        setHasCameraPermission(false);
+        console.log("Camera access not attempted: navigator.mediaDevices not available.");
+      }
+    };
+
+    // getCameraPermission(); // Call only when the relevant section is active or needed.
+                          // For now, let's assume it's triggered by a user action.
+  }, [toast]);
+
 
   const resetAllOutputs = () => {
     setPreparedSpeechText(null);
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
     setTextForSimulatedClonedVoice(null);
+    setSelectedImage(null);
+    setImagePreview(null);
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
       window.speechSynthesis.cancel();
@@ -114,7 +150,18 @@ export default function Home() {
       setSelectedImage(null);
       setImagePreview(null);
     }
-    resetAllOutputs(); 
+    // Reset outputs that depend on this input
+    setPreparedSpeechText(null);
+    setAnimatedVideoResult(null);
+    setMockVideoPlayerImage(null);
+    setTextForSimulatedClonedVoice(null);
+
+    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeaking || isSimulatedClonedVoiceSpeaking)) {
+        window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+    setSpeakingText(null);
+    setIsSimulatedClonedVoiceSpeaking(false);
   };
 
   const toDataURL = (file: File): Promise<string> =>
@@ -134,14 +181,11 @@ export default function Home() {
     if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending) ) {
       window.speechSynthesis.cancel();
     }
-    // Reset all speech states
     setIsSpeaking(false);
     setSpeakingText(null);
-    setIsSimulatedClonedVoiceSpeaking(false);
-    
+    setIsSimulatedClonedVoiceSpeaking(false);    
 
     setIsGeneratingSpeech(true);
-    // Reset all outputs except those directly tied to this process
     setPreparedSpeechText(null); 
     setAnimatedVideoResult(null); 
     setMockVideoPlayerImage(null);
@@ -170,7 +214,6 @@ export default function Home() {
                           !preparedText.toLowerCase().startsWith("error:");
 
       if (isSpeechSupported && shouldSpeak) {
-        // Delay speech to allow UI updates and cancel to complete
         setTimeout(() => {
             const utterance = new SpeechSynthesisUtterance(preparedText);
             utterance.onstart = () => {
@@ -232,11 +275,10 @@ export default function Home() {
 
     const textToSpeak = preparedSpeechText;
 
-    if (isSpeaking && speakingText === textToSpeak) { // If already speaking this specific text, stop it
+    if (isSpeaking && speakingText === textToSpeak) { 
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
       setSpeakingText(null);
-      // setIsSimulatedClonedVoiceSpeaking(false); // Already handled by the speaking logic
       return;
     }
     
@@ -244,7 +286,6 @@ export default function Home() {
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
         window.speechSynthesis.cancel();
       }
-      // Reset all speech states before starting new
       setIsSpeaking(false); 
       setSpeakingText(null);
       setIsSimulatedClonedVoiceSpeaking(false); 
@@ -279,7 +320,6 @@ export default function Home() {
     if (file) setSelectedVoiceSample(file);
     else setSelectedVoiceSample(null);
     
-    // Reset outputs that depend on voice cloning or its source text
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
     setTextForSimulatedClonedVoice(null);
@@ -294,16 +334,25 @@ export default function Home() {
 
 
  const handleCloneVoiceAndSynthesize = async () => {
+    console.log('[handleCloneVoiceAndSynthesize] Initiated.');
+    console.log('[handleCloneVoiceAndSynthesize] Selected voice sample:', selectedVoiceSample?.name);
+    console.log('[handleCloneVoiceAndSynthesize] Is prepared text usable:', isPreparedTextUsable);
+    console.log('[handleCloneVoiceAndSynthesize] Current preparedSpeechText:', preparedSpeechText);
+
     if (!selectedVoiceSample) {
       toast({ title: "Voice Sample Required", description: "Please select a voice sample.", variant: "destructive" });
+      console.warn('[handleCloneVoiceAndSynthesize] Aborted: No voice sample selected.');
       return;
     }
     if (!isPreparedTextUsable) {
       toast({ title: "Prepared Speech Text Required", description: "Please process some text for speech first. Voice cloning needs text to synthesize.", variant: "destructive" });
+      console.warn('[handleCloneVoiceAndSynthesize] Aborted: Prepared text is not usable.');
       return;
     }
     
-    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeaking || isSimulatedClonedVoiceSpeaking)) {
+    // Cancel any ongoing speech from any source and reset states
+    if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+        console.log('[handleCloneVoiceAndSynthesize] Cancelling ongoing speech before starting mock cloning.');
         window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
@@ -312,8 +361,10 @@ export default function Home() {
 
     setIsCloningVoice(true);
     toast({ title: "Mock Voice Cloning", description: "Initializing voice cloning process..." });
-    setTextForSimulatedClonedVoice(null); // Clear previous cloned text
-    setAnimatedVideoResult(null); // Clear animation as it depends on audio
+    
+    // Clear outputs that will be regenerated by this process
+    setTextForSimulatedClonedVoice(null); 
+    setAnimatedVideoResult(null); 
     setMockVideoPlayerImage(null);
     
     try {
@@ -323,13 +374,25 @@ export default function Home() {
       toast({ title: "Mock Voice Cloning", description: "Synthesizing speech with cloned voice..." });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      setTextForSimulatedClonedVoice(preparedSpeechText); 
-      toast({ title: "Mock Voice Cloning Complete", description: `Speech based on "${preparedSpeechText!.substring(0,50)}..." using voice sample "${selectedVoiceSample.name}" is (mock) ready for simulated playback.` });
+      // Re-check preparedSpeechText usability before setting it for cloned voice
+      // This is a defensive check, it should ideally be the same as the initial check.
+      if (preparedSpeechText && isPreparedTextUsable) {
+        setTextForSimulatedClonedVoice(preparedSpeechText); 
+        console.log('[handleCloneVoiceAndSynthesize] Successfully set textForSimulatedClonedVoice to:', preparedSpeechText);
+        toast({ title: "Mock Voice Cloning Complete", description: `Speech based on "${preparedSpeechText.substring(0,50)}..." using voice sample "${selectedVoiceSample.name}" is (mock) ready for simulated playback.` });
+      } else {
+        // This case should ideally not be reached if the initial check passed, but it's a safeguard.
+        setTextForSimulatedClonedVoice(null);
+        console.error('[handleCloneVoiceAndSynthesize] Error: preparedSpeechText became unusable or null during mock cloning simulation.');
+        toast({ title: "Cloning Error", description: "Prepared text became unavailable during mock cloning. Please try preparing text again.", variant: "destructive" });
+      }
     } catch (error) {
-      console.error("Error during mock voice cloning:", error);
+      console.error("Error during mock voice cloning simulation:", error);
       toast({ title: "Cloning Error", description: "An unexpected error occurred during mock voice cloning.", variant: "destructive" });
+      setTextForSimulatedClonedVoice(null); // Ensure reset on error
     } finally {
       setIsCloningVoice(false);
+      console.log('[handleCloneVoiceAndSynthesize] Completed. isCloningVoice set to false.');
     }
   };
 
@@ -349,22 +412,22 @@ export default function Home() {
         return;
     }
 
-    if (isSimulatedClonedVoiceSpeaking) { // If already speaking this specific type, stop it
+    if (isSimulatedClonedVoiceSpeaking) { 
         console.log('[handlePlaySimulatedClonedVoice] Attempting to STOP cloned voice.');
         window.speechSynthesis.cancel();
         setIsSimulatedClonedVoiceSpeaking(false);
+        // No need to clear speakingText here as it's for the *other* TTS
         return;
     }
 
     console.log('[handlePlaySimulatedClonedVoice] Attempting to PLAY cloned voice.');
-    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) { // If any other speech is happening, cancel it
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) { 
         console.log('[handlePlaySimulatedClonedVoice] Cancelling other speech before playing cloned voice.');
         window.speechSynthesis.cancel();
     }
-    // Reset all speech states before starting new
     setIsSpeaking(false);
     setSpeakingText(null);
-    setIsSimulatedClonedVoiceSpeaking(false); // Will be set to true in onstart
+    setIsSimulatedClonedVoiceSpeaking(false); 
 
     setTimeout(() => {
         console.log('[handlePlaySimulatedClonedVoice] setTimeout: Speaking now with text:', textForSimulatedClonedVoice);
@@ -382,7 +445,7 @@ export default function Home() {
         utterance.onerror = (event) => {
             console.error("[handlePlaySimulatedClonedVoice] Speech synthesis error (Simulated Cloned). Code:", event.error, "Event details:", event);
             toast({ title: "Speech Error", description: "Could not play simulated cloned voice. Check console for details.", variant: "destructive" });
-            setIsSimulatedClonedVoiceSpeaking(false); // Ensure reset on error
+            setIsSimulatedClonedVoiceSpeaking(false); 
         };
         window.speechSynthesis.speak(utterance);
     }, 100);
@@ -403,7 +466,7 @@ export default function Home() {
       setStaticFaceImage(null);
       setStaticFaceImagePreview(null);
     }
-    setAnimatedVideoResult(null); // Reset animation if face image changes
+    setAnimatedVideoResult(null); 
     setMockVideoPlayerImage(null);
   };
 
@@ -444,9 +507,9 @@ export default function Home() {
       let voiceInfo = '';
       if (textForSimulatedClonedVoice && selectedVoiceSample) {
         voiceInfo = ` (simulated with custom voice from "${selectedVoiceSample.name}")`;
-      } else if (isPreparedTextUsable && selectedVoiceSample) { // if standard TTS was used, but a sample was available for context
+      } else if (isPreparedTextUsable && selectedVoiceSample) { 
         voiceInfo = ` (standard browser TTS used, voice sample "${selectedVoiceSample.name}" was available for context)`;
-      } else if (isPreparedTextUsable) { // if standard TTS was used, and no sample was involved
+      } else if (isPreparedTextUsable) { 
         voiceInfo = ` (standard browser TTS used)`;
       }
 
@@ -464,7 +527,6 @@ export default function Home() {
     }
   };
 
-  const canAnimateFace = staticFaceImage && (isPreparedTextUsable || textForSimulatedClonedVoice);
   const anyLoading = isGeneratingSpeech || isCloningVoice || isAnimatingFace;
   const isCurrentPreparedTextSpeaking = isSpeaking && speakingText === preparedSpeechText;
 
@@ -484,7 +546,17 @@ export default function Home() {
                   value={textInput}
                   onChange={(e) => {
                     setTextInput(e.target.value);
-                    resetAllOutputs();
+                    // Reset outputs dependent on textInput
+                    setPreparedSpeechText(null);
+                    setTextForSimulatedClonedVoice(null);
+                    setAnimatedVideoResult(null);
+                    setMockVideoPlayerImage(null);
+                    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeaking || isSimulatedClonedVoiceSpeaking)) {
+                        window.speechSynthesis.cancel();
+                    }
+                    setIsSpeaking(false);
+                    setSpeakingText(null);
+                    setIsSimulatedClonedVoiceSpeaking(false);
                   }}
                   placeholder="Type or paste your text here..."
                   rows={4}
@@ -532,7 +604,7 @@ export default function Home() {
                         onClick={handleSpeakPreparedText}
                         variant="outline"
                         size="sm"
-                        disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!isCurrentPreparedTextSpeaking && !isPreparedTextUsable) }
+                        disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!isPreparedTextUsable && !isCurrentPreparedTextSpeaking) }
                       >
                         {isSpeaking && speakingText === preparedSpeechText ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
                       </Button>
@@ -582,7 +654,7 @@ export default function Home() {
                     onClick={handlePlaySimulatedClonedVoice} 
                     variant="outline"
                     size="sm"
-                    disabled={anyLoading || !textForSimulatedClonedVoice || isSpeaking}
+                    disabled={anyLoading || !textForSimulatedClonedVoice || isSpeaking} // Prevent playing if standard TTS is active
                    >
                      {isSimulatedClonedVoiceSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Simulated Voice</> : <><Volume2 className="mr-2 h-4 w-4" />Play Simulated Cloned Voice</>}
                    </Button>
@@ -628,7 +700,7 @@ export default function Home() {
 
               <Button
                 onClick={handleAnimateFace}
-                disabled={anyLoading || !canAnimateFace}
+                disabled={anyLoading || !staticFaceImage || (!isPreparedTextUsable && !textForSimulatedClonedVoice)}
                 className="w-full sm:w-auto"
               >
                 {isAnimatingFace ? (
@@ -676,7 +748,7 @@ export default function Home() {
                     <p className="text-sm whitespace-pre-wrap text-foreground/80 bg-background/50 p-3 rounded-md shadow-sm">{animatedVideoResult}</p>
                     {!textForSimulatedClonedVoice && isPreparedTextUsable && isSpeechSupported && (
                        <Button
-                         onClick={handleSpeakPreparedText} // Re-uses the standard TTS playback for the animation's audio
+                         onClick={handleSpeakPreparedText} 
                          variant="outline"
                          size="sm"
                          disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!isCurrentPreparedTextSpeaking && !isPreparedTextUsable) }
@@ -685,15 +757,45 @@ export default function Home() {
                       </Button>
                     )}
                     {textForSimulatedClonedVoice && isSpeechSupported && (
-                      <p className="text-sm text-muted-foreground italic">
-                        This animation would use the (mock) simulated cloned audio. Please use the player in the 'Voice Cloning & Synthesis' section to attempt playback.
-                      </p>
+                       <Button
+                        onClick={handlePlaySimulatedClonedVoice} 
+                        variant="outline"
+                        size="sm"
+                        disabled={anyLoading || isSpeaking} // Prevent playing if standard TTS is active
+                       >
+                         {isSimulatedClonedVoiceSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Animation Audio (Simulated)</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (Simulated)</>}
+                       </Button>
                     )}
                   </div>
                 )}
               </div>
                <p className="text-sm text-muted-foreground mt-4">
                 This section demonstrates the planned UI for lip-syncing a static face image with the generated audio (either standard TTS or mock cloned voice). The actual animation processing would be handled by a backend service.
+              </p>
+            </div>
+          </SectionCard>
+           <SectionCard title="Week 3: Real-time Avatar Animation (Camera Input + Lip Sync)" icon={<Video className="text-primary" />}>
+            <div className="space-y-4">
+              <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+              {hasCameraPermission === false && (
+                <Alert variant="destructive">
+                  <AlertTitle>Camera Access Required</AlertTitle>
+                  <AlertDescription>
+                    Please allow camera access in your browser settings to use this feature. You may need to refresh the page after granting permission.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {hasCameraPermission === null && (
+                 <Alert variant="default">
+                  <AlertTitle>Checking Camera Permission</AlertTitle>
+                  <AlertDescription>
+                    Attempting to access your camera...
+                  </AlertDescription>
+                </Alert>
+              )}
+               <p className="text-sm text-muted-foreground mt-4">
+                This section is a placeholder for Week 3 functionality involving real-time camera input for avatar animation.
+                Camera permission will be requested when this section becomes active. The video feed above will show your camera if permission is granted.
               </p>
             </div>
           </SectionCard>
@@ -705,4 +807,3 @@ export default function Home() {
     </div>
   );
 }
-

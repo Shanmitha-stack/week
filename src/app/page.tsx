@@ -159,7 +159,7 @@ export default function Home() {
       setImagePreview(null);
     }
     // Reset outputs that depend on this input
-    setPreparedSpeechText(null); // Crucial reset
+    setPreparedSpeechText(null); 
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
     setTextForSimulatedClonedVoice(null);

@@ -109,7 +109,7 @@ export default function Home() {
         utterance.onstart = () => setIsSpeaking(true);
         utterance.onend = () => setIsSpeaking(false);
         utterance.onerror = (event) => {
-          console.error("Speech synthesis error:", event);
+          console.error("Speech synthesis error. Code:", event.error, "Event details:", event);
           toast({ title: "Speech Error", description: "Could not play speech automatically. You can try the 'Speak' button.", variant: "destructive" });
           setIsSpeaking(false);
         };
@@ -157,7 +157,7 @@ export default function Home() {
       utterance.onstart = () => setIsSpeaking(true);
       utterance.onend = () => setIsSpeaking(false);
       utterance.onerror = (event) => {
-        console.error("Speech synthesis error:", event);
+        console.error("Speech synthesis error. Code:", event.error, "Event details:", event);
         toast({ title: "Speech Error", description: "Could not play speech. Please try again.", variant: "destructive" });
         setIsSpeaking(false);
       };

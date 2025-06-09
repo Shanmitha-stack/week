@@ -37,8 +37,9 @@ export default function Home() {
 
   const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
 
-  const [staticFaceImage, setStaticFaceImage] = useState<File | null>(null);
-  const [staticFaceImagePreview, setStaticFaceImagePreview] = useState<string | null>(null);
+  // No longer need separate state for static face image; it will use selectedImage/imagePreview
+  // const [staticFaceImage, setStaticFaceImage] = useState<File | null>(null);
+  // const [staticFaceImagePreview, setStaticFaceImagePreview] = useState<string | null>(null);
   const [animatedVideoResult, setAnimatedVideoResult] = useState<string | null>(null);
   const [isAnimatingFace, setIsAnimatingFace] = useState<boolean>(false);
   const [mockVideoPlayerImage, setMockVideoPlayerImage] = useState<string | null>(null);
@@ -120,7 +121,7 @@ export default function Home() {
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
     setTextForSimulatedClonedVoice(null);
-    // Keep selectedImage, imagePreview, staticFaceImage, staticFaceImagePreview as they are user inputs
+    // Keep selectedImage, imagePreview as they are user inputs
     // selectedVoiceSample is also a user input
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
@@ -168,8 +169,8 @@ export default function Home() {
     });
 
   const handleTextToSpeech = async () => {
-    if (!textInput.trim() && !selectedImage && !staticFaceImagePreview) {
-      toast({ title: "Input Required", description: "Please enter some text or select an image (either in this section or in the face animation section).", variant: "destructive" });
+    if (!textInput.trim() && !selectedImage) { // Input check simplified
+      toast({ title: "Input Required", description: "Please enter some text or select an image.", variant: "destructive" });
       return;
     }
 
@@ -190,24 +191,9 @@ export default function Home() {
     setMockVideoPlayerImage(null);
 
     let imageDataUri: string | undefined = undefined;
-    if (selectedImage) { // Prioritize image selected in this section
-      try {
-        imageDataUri = await toDataURL(selectedImage);
-        console.log('[handleTextToSpeech] Using locally selected image for speech context.');
-      } catch (error) {
-        console.error("Error converting local selectedImage to data URI:", error);
-        toast({ title: "Image Error", description: "Failed to process locally selected image. Please try another.", variant: "destructive" });
-        setIsGeneratingSpeech(false);
-        return;
-      }
-    } else if (staticFaceImagePreview) { // Fallback to static face image if no local image
-      imageDataUri = staticFaceImagePreview; // This is already a data URI
-      console.log('[handleTextToSpeech] No local image selected. Using uploaded static face image for speech context.');
-      toast({
-        title: "Using Face Image for Context",
-        description: "No image selected in this section; using the uploaded static face image as context for speech preparation.",
-        duration: 5000,
-      });
+    if (imagePreview && selectedImage) { // Use imagePreview if available (from selectedImage)
+        imageDataUri = imagePreview;
+        console.log('[handleTextToSpeech] Using image from "Text & Image" section for speech context.');
     } else {
       console.log('[handleTextToSpeech] No image provided for context.');
     }
@@ -536,31 +522,11 @@ export default function Home() {
   }, [isSpeechSupported, toast]);
 
 
-  const handleStaticFaceImageChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setStaticFaceImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setStaticFaceImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    } else {
-      setStaticFaceImage(null);
-      setStaticFaceImagePreview(null);
-    }
-    // Reset outputs that might depend on this or become stale
-    setAnimatedVideoResult(null);
-    setMockVideoPlayerImage(null);
-    // If the face image changes, any speech prepared using it as context might be stale, but we don't reset preparedSpeechText here
-    // as it's more directly tied to the text input section.
-  };
-
   const handleAnimateFace = async () => {
     console.log('[handleAnimateFace] Initiated.');
-    if (!staticFaceImage) {
-      toast({ title: "Static Face Image Required", description: "Please upload a static face image.", variant: "destructive" });
-      console.log('[handleAnimateFace] Aborted: No static face image.');
+    if (!selectedImage) { // Check selectedImage from the first section
+      toast({ title: "Image Required for Animation", description: "Please upload an image in the 'Text & Image to Speech Preparation' section. That image will be used for animation.", variant: "destructive" });
+      console.log('[handleAnimateFace] Aborted: No image uploaded in the first section.');
       return;
     }
     
@@ -614,7 +580,8 @@ export default function Home() {
         voiceInfoSegment = ` (standard browser TTS used)`;
       }
 
-      const mockVideoOutputMessage = `Animation using face image "${staticFaceImage.name}", with ${audioContextMessageSegment}${voiceInfoSegment}. The animated video would be displayed here. (Mock Output)`;
+      // Use selectedImage.name since staticFaceImage is removed
+      const mockVideoOutputMessage = `Animation using image "${selectedImage.name}", with ${audioContextMessageSegment}${voiceInfoSegment}. The animated video would be displayed here. (Mock Output)`;
       
       console.log('[handleAnimateFace] Mock processing complete. Setting animation results.');
       setAnimatedVideoResult(mockVideoOutputMessage);
@@ -790,32 +757,32 @@ export default function Home() {
           <SectionCard title="Face Preprocessing + Lip Sync Video (Audio + Image → Talking Face)" icon={<Smile className="text-primary" />} >
             <div className="space-y-4">
               <div>
-                <Label htmlFor="static-face-image-input" className="text-base">Upload a static face image:</Label>
-                <Input
-                  id="static-face-image-input"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleStaticFaceImageChange} // Resets relevant outputs internally
-                  className="text-base mt-1 file:text-primary file:font-medium"
-                />
-                {staticFaceImagePreview && (
-                  <div className="mt-2 border rounded-md p-2 inline-block bg-muted/30">
-                    <Image
-                      src={staticFaceImagePreview}
-                      alt="Static face image preview"
-                      width={200}
-                      height={200}
-                      className="rounded-md object-contain max-h-48 w-auto"
-                      data-ai-hint="face portrait"
-                    />
-                  </div>
-                )}
+                <Label htmlFor="animation-image-source" className="text-base">Image Source for Animation:</Label>
+                 {imagePreview && selectedImage ? (
+                    <div className="mt-2 border rounded-md p-2 inline-block bg-muted/30">
+                      <p className="text-sm text-muted-foreground mb-1">
+                        Using image uploaded in the "Text &amp; Image to Speech Preparation" section:
+                      </p>
+                      <Image
+                        src={imagePreview}
+                        alt="Image for animation (from first section)"
+                        width={200}
+                        height={200}
+                        className="rounded-md object-contain max-h-48 w-auto"
+                        data-ai-hint="face portrait"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-1" id="animation-image-source">
+                      Please upload an image in the "Text &amp; Image to Speech Preparation" section. That image will be used for animation.
+                    </p>
+                  )}
               </div>
 
               <Button
                 onClick={handleAnimateFace}
-                 // Disable if any global loading, no static face image, or no audio source (neither usable prepared text nor simulated cloned voice text)
-                disabled={anyLoading || !staticFaceImage || (!isPreparedTextUsable() && !textForSimulatedClonedVoiceRef.current)}
+                 // Disable if any global loading, no selectedImage from first section, or no audio source
+                disabled={anyLoading || !selectedImage || (!isPreparedTextUsable() && !textForSimulatedClonedVoiceRef.current)}
                 className="w-full sm:w-auto"
               >
                 {isAnimatingFace ? (
@@ -854,7 +821,7 @@ export default function Home() {
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
                       <VideoOff className="h-12 w-12 mb-4" />
                       <p className="text-lg font-semibold">Animation will appear here</p>
-                      <p className="text-sm">Upload a face image and ensure audio (prepared speech or mock cloned) is available, then click "Animate Face".</p>
+                      <p className="text-sm">Upload an image in the first section and ensure audio (prepared speech or mock cloned) is available, then click "Animate Face".</p>
                     </div>
                   )}
                 </div>
@@ -886,7 +853,7 @@ export default function Home() {
                 )}
               </div>
                <p className="text-sm text-muted-foreground mt-4">
-                This section demonstrates the planned UI for lip-syncing a static face image with the generated audio (either standard TTS or mock cloned voice). The actual animation processing would be handled by a backend service.
+                This section demonstrates the planned UI for lip-syncing an image (uploaded in the first section) with the generated audio (either standard TTS or mock cloned voice). The actual animation processing would be handled by a backend service.
               </p>
             </div>
           </SectionCard>

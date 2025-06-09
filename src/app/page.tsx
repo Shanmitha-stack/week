@@ -3,23 +3,17 @@
 
 import React, { useState, ChangeEvent, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
-// import { useSearchParams } from 'next/navigation'; // No longer explicitly used
 import AppHeader from '@/components/AppHeader';
 import SectionCard from '@/components/SectionCard';
-// import AudioPlayer from '@/components/AudioPlayer'; // No longer directly used
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
-// import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-
 
 export default function Home() {
-  // const searchParams = useSearchParams(); // Explicitly calling, though not used, as per previous diagnostic step.
-
   const [textInput, setTextInput] = useState<string>('');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
 
@@ -32,21 +26,17 @@ export default function Home() {
   const [textForSimulatedClonedVoice, setTextForSimulatedClonedVoice] = useState<string | null>(null);
   
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
-  const [speakingText, setSpeakingText] = useState<string | null>(null); // Tracks the text content of the standard TTS utterance
-  const [isSimulatedClonedVoiceSpeaking, setIsSimulatedClonedVoiceSpeaking] = useState<boolean>(false); // Tracks if simulated cloned voice is speaking
+  const [speakingText, setSpeakingText] = useState<string | null>(null);
+  const [isSimulatedClonedVoiceSpeaking, setIsSimulatedClonedVoiceSpeaking] = useState<boolean>(false);
 
   const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
 
-  // No longer need separate state for static face image; it will use selectedImage/imagePreview
-  // const [staticFaceImage, setStaticFaceImage] = useState<File | null>(null);
-  // const [staticFaceImagePreview, setStaticFaceImagePreview] = useState<string | null>(null);
   const [animatedVideoResult, setAnimatedVideoResult] = useState<string | null>(null);
   const [isAnimatingFace, setIsAnimatingFace] = useState<boolean>(false);
   const [mockVideoPlayerImage, setMockVideoPlayerImage] = useState<string | null>(null);
 
   const { toast } = useToast();
 
-  // Refs to hold the latest state for use in setTimeout/event callbacks
   const isSpeakingRef = useRef(isSpeaking);
   const isSimulatedClonedVoiceSpeakingRef = useRef(isSimulatedClonedVoiceSpeaking);
   const preparedSpeechTextRef = useRef(preparedSpeechText);
@@ -94,7 +84,7 @@ export default function Home() {
           logVoices();
         };
       } else {
-        setTimeout(logVoices, 500); // Fallback check if onvoiceschanged is not supported
+        setTimeout(logVoices, 500); 
       }
 
     } else {
@@ -107,25 +97,22 @@ export default function Home() {
          if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
           window.speechSynthesis.cancel();
         }
-        window.speechSynthesis.onvoiceschanged = null; // Clean up event listener
+        window.speechSynthesis.onvoiceschanged = null; 
       }
-      // Reset relevant states on unmount
       setIsSpeaking(false);
       setSpeakingText(null);
       setIsSimulatedClonedVoiceSpeaking(false);
     };
   }, []);
   
-  const resetAllOutputs = () => {
+  const resetAllOutputsDependentOnTextOrImage = () => {
     setPreparedSpeechText(null);
+    setTextForSimulatedClonedVoice(null); 
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
-    setTextForSimulatedClonedVoice(null);
-    // Keep selectedImage, imagePreview as they are user inputs
-    // selectedVoiceSample is also a user input
 
-    if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
-      window.speechSynthesis.cancel();
+    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
+        window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
     setSpeakingText(null);
@@ -146,52 +133,32 @@ export default function Home() {
       setSelectedImage(null);
       setImagePreview(null);
     }
-    // Reset outputs that depend on this input
-    setPreparedSpeechText(null);
-    setTextForSimulatedClonedVoice(null); 
-    setAnimatedVideoResult(null);
-    setMockVideoPlayerImage(null);
-
-    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
-        window.speechSynthesis.cancel();
-    }
-    setIsSpeaking(false);
-    setSpeakingText(null);
-    setIsSimulatedClonedVoiceSpeaking(false);
+    resetAllOutputsDependentOnTextOrImage();
   };
 
-  const toDataURL = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
 
   const handleTextToSpeech = async () => {
-    if (!textInput.trim() && !selectedImage) { // Input check simplified
+    if (!textInput.trim() && !selectedImage) {
       toast({ title: "Input Required", description: "Please enter some text or select an image.", variant: "destructive" });
       return;
     }
 
-    // Cancel any ongoing speech and reset speech states
     if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending) ) {
       console.log('[handleTextToSpeech] Cancelling any ongoing browser speech before processing new input.');
       window.speechSynthesis.cancel();
     }
-    setIsSpeaking(false); // Reset standard TTS state
+    setIsSpeaking(false); 
     setSpeakingText(null);
-    setIsSimulatedClonedVoiceSpeaking(false); // Reset simulated cloned voice state
+    setIsSimulatedClonedVoiceSpeaking(false); 
 
     setIsGeneratingSpeech(true);
-    setPreparedSpeechText(null); // Clear previous prepared text
-    // Reset other outputs that might become stale
+    setPreparedSpeechText(null); 
     setTextForSimulatedClonedVoice(null);
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
 
     let imageDataUri: string | undefined = undefined;
-    if (imagePreview && selectedImage) { // Use imagePreview if available (from selectedImage)
+    if (imagePreview && selectedImage) { 
         imageDataUri = imagePreview;
         console.log('[handleTextToSpeech] Using image from "Text & Image" section for speech context.');
     } else {
@@ -201,7 +168,7 @@ export default function Home() {
 
     try {
       const { preparedText } = await prepareTextForSpeech({ text: textInput, imageDataUri });
-      setPreparedSpeechText(preparedText); // This will update preparedSpeechTextRef.current via its own useEffect
+      setPreparedSpeechText(preparedText); 
 
       const shouldSpeak = preparedText &&
                           preparedText.trim() !== "" &&
@@ -209,13 +176,11 @@ export default function Home() {
                           !preparedText.toLowerCase().startsWith("error:");
 
       if (isSpeechSupported && shouldSpeak) {
-        // States are set before setTimeout to reflect immediate intent
         setIsSpeaking(true); 
-        setSpeakingText(preparedText); // This updates speakingTextRef via its useEffect
+        setSpeakingText(preparedText); 
         setIsSimulatedClonedVoiceSpeaking(false);
 
         setTimeout(() => {
-            // Check refs for the most current state inside setTimeout
             if (!isSpeakingRef.current || speakingTextRef.current !== preparedText) {
                  console.log('[handleTextToSpeech auto-play] Auto-play speak request was cancelled or text changed before execution. Current isSpeakingRef:', isSpeakingRef.current, 'Current speakingTextRef:', speakingTextRef.current, 'Target preparedText:', preparedText);
                  if (isSpeakingRef.current && speakingTextRef.current !== preparedText) {
@@ -228,7 +193,6 @@ export default function Home() {
             const utterance = new SpeechSynthesisUtterance(preparedText);
             utterance.onstart = () => {
               console.log('[handleTextToSpeech auto-play] Utterance started.');
-              // States already set reflecting intent
             };
             utterance.onend = () => {
               console.log('[handleTextToSpeech auto-play] Utterance ended.');
@@ -279,12 +243,12 @@ export default function Home() {
   
 
   const isPreparedTextUsable = useCallback(() => {
-    const currentPreparedText = preparedSpeechTextRef.current; // Use ref for latest value
+    const currentPreparedText = preparedSpeechTextRef.current; 
     return currentPreparedText &&
            currentPreparedText.trim() !== "" &&
            !currentPreparedText.toLowerCase().startsWith("no text was provided") &&
            !currentPreparedText.toLowerCase().startsWith("error:");
-  }, []); // No direct state dependencies, relies on ref
+  }, []); 
 
   const handleSpeakPreparedText = useCallback(() => {
     if (!isSpeechSupported) {
@@ -292,9 +256,8 @@ export default function Home() {
       return;
     }
 
-    const textToSpeak = preparedSpeechTextRef.current; // Use ref for latest value
+    const textToSpeak = preparedSpeechTextRef.current; 
 
-    // If already speaking this exact text, stop it.
     if (isSpeakingRef.current && speakingTextRef.current === textToSpeak) {
       console.log('[handleSpeakPreparedText] Attempting to STOP standard TTS because it is currently speaking this text.');
       window.speechSynthesis.cancel();
@@ -303,7 +266,6 @@ export default function Home() {
       return;
     }
     
-    // If trying to speak new text, or starting fresh
     if (textToSpeak && isPreparedTextUsable()) {
       console.log('[handleSpeakPreparedText] Attempting to PLAY standard TTS with text:', textToSpeak);
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
@@ -311,16 +273,14 @@ export default function Home() {
         window.speechSynthesis.cancel();
       }
       
-      // Set states to reflect intent *before* setTimeout
       setIsSpeaking(true);
-      setSpeakingText(textToSpeak); // This will update speakingTextRef
-      setIsSimulatedClonedVoiceSpeaking(false); // Ensure other speech type is off
+      setSpeakingText(textToSpeak); 
+      setIsSimulatedClonedVoiceSpeaking(false); 
 
       setTimeout(() => {
-        // Check refs for the most current state inside setTimeout
         if (!isSpeakingRef.current || speakingTextRef.current !== textToSpeak) {
           console.log('[handleSpeakPreparedText] Speak request was cancelled or text changed before execution. Current isSpeakingRef:', isSpeakingRef.current, 'Current speakingTextRef:', speakingTextRef.current, 'Target textToSpeak:', textToSpeak);
-           if (isSpeakingRef.current && speakingTextRef.current !== textToSpeak) { // If still "speaking" but a different text, stop it.
+           if (isSpeakingRef.current && speakingTextRef.current !== textToSpeak) { 
               setIsSpeaking(false); 
               setSpeakingText(null);
            }
@@ -330,7 +290,6 @@ export default function Home() {
         const utterance = new SpeechSynthesisUtterance(textToSpeak);
         utterance.onstart = () => {
           console.log('[handleSpeakPreparedText] Utterance started.');
-          // States already set reflecting intent
         };
         utterance.onend = () => {
           console.log('[handleSpeakPreparedText] Utterance ended.');
@@ -361,7 +320,6 @@ export default function Home() {
     if (file) setSelectedVoiceSample(file);
     else setSelectedVoiceSample(null);
     
-    // Reset outputs that might depend on this or become stale
     setTextForSimulatedClonedVoice(null);
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
@@ -381,9 +339,9 @@ export default function Home() {
 
     console.log('[handleCloneVoiceAndSynthesize] Initiated.');
     console.log('[handleCloneVoiceAndSynthesize] Selected voice sample:', selectedVoiceSample?.name);
-    const currentPreparedTextIsUsable = isPreparedTextUsable(); // Uses ref via callback
+    const currentPreparedTextIsUsable = isPreparedTextUsable(); 
     console.log('[handleCloneVoiceAndSynthesize] Is prepared text usable at start:', currentPreparedTextIsUsable);
-    const currentPreparedSpeechTextValue = preparedSpeechTextRef.current; // Capture current value from ref
+    const currentPreparedSpeechTextValue = preparedSpeechTextRef.current; 
     console.log('[handleCloneVoiceAndSynthesize] Current preparedSpeechText at start (from ref):', currentPreparedSpeechTextValue);
 
     if (!selectedVoiceSample) {
@@ -392,14 +350,13 @@ export default function Home() {
       setIsCloningVoice(false);
       return;
     }
-    if (!currentPreparedTextIsUsable || !currentPreparedSpeechTextValue) { // Use captured value for check
+    if (!currentPreparedTextIsUsable || !currentPreparedSpeechTextValue) { 
       toast({ title: "Prepared Speech Text Required", description: "Please process some text for speech first. Voice cloning needs text to synthesize.", variant: "destructive" });
       console.warn('[handleCloneVoiceAndSynthesize] Aborted: Prepared text is not usable or null. Value was:', currentPreparedSpeechTextValue);
       setIsCloningVoice(false);
       return;
     }
     
-    // Cancel any ongoing speech and reset speech states
     if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
         console.log('[handleCloneVoiceAndSynthesize] Cancelling ongoing speech before starting mock cloning.');
         window.speechSynthesis.cancel();
@@ -408,27 +365,25 @@ export default function Home() {
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
     
-    // Reset potentially stale outputs
     setTextForSimulatedClonedVoice(null); 
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate initial processing
+      await new Promise(resolve => setTimeout(resolve, 1000)); 
       toast({ title: "Mock Voice Cloning", description: "Processing voice sample..." });
       
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate core cloning
+      await new Promise(resolve => setTimeout(resolve, 1500)); 
       toast({ title: "Mock Voice Cloning", description: "Synthesizing speech with cloned voice..." });
       
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate finalization
+      await new Promise(resolve => setTimeout(resolve, 2000)); 
 
-      // Use the preparedSpeechText captured at the *start* of this function
       if (currentPreparedSpeechTextValue && 
           currentPreparedSpeechTextValue.trim() !== "" &&
           !currentPreparedSpeechTextValue.toLowerCase().startsWith("no text was provided") &&
           !currentPreparedSpeechTextValue.toLowerCase().startsWith("error:")
       ) {
-        setTextForSimulatedClonedVoice(currentPreparedSpeechTextValue); // Updates textForSimulatedClonedVoiceRef
+        setTextForSimulatedClonedVoice(currentPreparedSpeechTextValue); 
         console.log('[handleCloneVoiceAndSynthesize] Successfully set textForSimulatedClonedVoice to:', currentPreparedSpeechTextValue);
         toast({ title: "Mock Voice Cloning Complete", description: `Speech based on "${currentPreparedSpeechTextValue.substring(0,50)}..." using voice sample "${selectedVoiceSample.name}" is (mock) ready for simulated playback.` });
       } else {
@@ -448,7 +403,7 @@ export default function Home() {
 
   const handlePlaySimulatedClonedVoice = useCallback(() => {
     console.log('[handlePlaySimulatedClonedVoice] triggered.');
-    const currentTextForSimulated = textForSimulatedClonedVoiceRef.current; // Use ref for latest value
+    const currentTextForSimulated = textForSimulatedClonedVoiceRef.current; 
     console.log('[handlePlaySimulatedClonedVoice] isSpeechSupported:', isSpeechSupported);
     console.log('[handlePlaySimulatedClonedVoice] textForSimulatedClonedVoice (from ref):', currentTextForSimulated);
     console.log('[handlePlaySimulatedClonedVoice] isSimulatedClonedVoiceSpeaking (current state from ref):', isSimulatedClonedVoiceSpeakingRef.current);
@@ -463,12 +418,10 @@ export default function Home() {
         return;
     }
 
-    // If already speaking this simulated voice, stop it.
     if (isSimulatedClonedVoiceSpeakingRef.current) {
         console.log('[handlePlaySimulatedClonedVoice] Attempting to STOP simulated cloned voice because it is currently speaking.');
         window.speechSynthesis.cancel();
         setIsSimulatedClonedVoiceSpeaking(false);
-        // speakingText is not relevant here as it's for the other TTS
         return;
     }
 
@@ -478,18 +431,15 @@ export default function Home() {
         window.speechSynthesis.cancel();
     }
     
-    // Set states to reflect intent *before* setTimeout
     setIsSimulatedClonedVoiceSpeaking(true);
-    setIsSpeaking(false); // Ensure other speech type is off
-    setSpeakingText(null); // Clear standard TTS text tracker
+    setIsSpeaking(false); 
+    setSpeakingText(null); 
 
     setTimeout(() => {
-        // Check ref for the most current state inside setTimeout
         if (!isSimulatedClonedVoiceSpeakingRef.current) {
             console.log('[handlePlaySimulatedClonedVoice] setTimeout: Play request for simulated cloned voice was cancelled before execution. Current isSimulatedClonedVoiceSpeakingRef:', isSimulatedClonedVoiceSpeakingRef.current);
             return;
         }
-        // Also ensure the text hasn't changed due to some other rapid action (though less likely for this specific state)
         if (textForSimulatedClonedVoiceRef.current !== currentTextForSimulated) {
             console.log('[handlePlaySimulatedClonedVoice] setTimeout: Text for simulated voice changed before execution. Aborting.');
             setIsSimulatedClonedVoiceSpeaking(false);
@@ -500,7 +450,6 @@ export default function Home() {
         const utterance = new SpeechSynthesisUtterance(currentTextForSimulated);
         utterance.onstart = () => {
             console.log('[handlePlaySimulatedClonedVoice] Utterance started.');
-            // States already set reflecting intent
         };
         utterance.onend = () => {
             console.log('[handlePlaySimulatedClonedVoice] Utterance ended.');
@@ -524,15 +473,15 @@ export default function Home() {
 
   const handleAnimateFace = async () => {
     console.log('[handleAnimateFace] Initiated.');
-    if (!selectedImage) { // Check selectedImage from the first section
+    if (!selectedImage) { 
       toast({ title: "Image Required for Animation", description: "Please upload an image in the 'Text & Image to Speech Preparation' section. That image will be used for animation.", variant: "destructive" });
       console.log('[handleAnimateFace] Aborted: No image uploaded in the first section.');
       return;
     }
     
-    const currentTextForSimulatedVal = textForSimulatedClonedVoiceRef.current; // Use ref
-    const currentPreparedTextIsUsableVal = isPreparedTextUsable(); // Use ref via callback
-    const currentPreparedSpeechTextVal = preparedSpeechTextRef.current; // Use ref
+    const currentTextForSimulatedVal = textForSimulatedClonedVoiceRef.current; 
+    const currentPreparedTextIsUsableVal = isPreparedTextUsable(); 
+    const currentPreparedSpeechTextVal = preparedSpeechTextRef.current; 
 
     const audioSourceText = currentTextForSimulatedVal ? "simulated cloned audio" : (currentPreparedTextIsUsableVal ? "prepared speech text" : null);
     console.log('[handleAnimateFace] Determined audioSourceText:', audioSourceText);
@@ -547,7 +496,6 @@ export default function Home() {
       return;
     }
     
-    // Cancel any ongoing speech and reset speech states
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
         console.log('[handleAnimateFace] Cancelling ongoing speech before animation.');
         window.speechSynthesis.cancel();
@@ -557,8 +505,8 @@ export default function Home() {
     setIsSimulatedClonedVoiceSpeaking(false);
 
     setIsAnimatingFace(true);
-    setAnimatedVideoResult(null); // Clear previous animation result
-    setMockVideoPlayerImage(null); // Clear previous mock video image
+    setAnimatedVideoResult(null); 
+    setMockVideoPlayerImage(null); 
 
     try {
       toast({ title: "Starting Animation Process", description: "Preprocessing face image..." });
@@ -574,13 +522,12 @@ export default function Home() {
       let voiceInfoSegment = '';
       if (currentTextForSimulatedVal && selectedVoiceSample) {
         voiceInfoSegment = ` (simulated with custom voice from "${selectedVoiceSample.name}")`;
-      } else if (currentPreparedTextIsUsableVal && selectedVoiceSample) { // Standard TTS was used, but voice sample was present for context
+      } else if (currentPreparedTextIsUsableVal && selectedVoiceSample) { 
         voiceInfoSegment = ` (standard browser TTS used, voice sample "${selectedVoiceSample.name}" was noted)`;
-      } else if (currentPreparedTextIsUsableVal) { // Standard TTS used, no voice sample involved
+      } else if (currentPreparedTextIsUsableVal) { 
         voiceInfoSegment = ` (standard browser TTS used)`;
       }
 
-      // Use selectedImage.name since staticFaceImage is removed
       const mockVideoOutputMessage = `Animation using image "${selectedImage.name}", with ${audioContextMessageSegment}${voiceInfoSegment}. The animated video would be displayed here. (Mock Output)`;
       
       console.log('[handleAnimateFace] Mock processing complete. Setting animation results.');
@@ -622,17 +569,7 @@ export default function Home() {
                   value={textInput}
                   onChange={(e) => {
                     setTextInput(e.target.value);
-                    // Reset dependent outputs when text input changes
-                    setPreparedSpeechText(null);
-                    setTextForSimulatedClonedVoice(null);
-                    setAnimatedVideoResult(null);
-                    setMockVideoPlayerImage(null);
-                    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
-                        window.speechSynthesis.cancel();
-                    }
-                    setIsSpeaking(false);
-                    setSpeakingText(null);
-                    setIsSimulatedClonedVoiceSpeaking(false);
+                    resetAllOutputsDependentOnTextOrImage();
                   }}
                   placeholder="Type or paste your text here..."
                   rows={4}
@@ -648,7 +585,7 @@ export default function Home() {
                   id="image-input"
                   type="file"
                   accept="image/*"
-                  onChange={handleImageChange} // Resets relevant outputs internally
+                  onChange={handleImageChange} 
                   className="text-base file:text-primary file:font-medium"
                 />
                 {imagePreview && (
@@ -680,8 +617,6 @@ export default function Home() {
                         onClick={handleSpeakPreparedText}
                         variant="outline"
                         size="sm"
-                        // Disable if any global loading, or simulated voice is speaking, 
-                        // or if this text is not usable (unless it's currently speaking this text, then allow stop)
                         disabled={anyLoading || isSimulatedClonedVoiceSpeakingRef.current || (!isPreparedTextUsable() && !isCurrentPreparedTextSpeaking) }
                       >
                         {isCurrentPreparedTextSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
@@ -707,7 +642,7 @@ export default function Home() {
                   id="voice-sample-input"
                   type="file"
                   accept="audio/*"
-                  onChange={handleVoiceSampleChange} // Resets relevant outputs internally
+                  onChange={handleVoiceSampleChange} 
                   className="text-base mt-1 file:text-primary file:font-medium"
                 />
                  <p className="text-xs text-muted-foreground mt-1 italic">Note: This uploaded sample is for simulation purposes. Playback will use a standard browser voice, not the uploaded sample's voice.</p>
@@ -717,7 +652,6 @@ export default function Home() {
               </div>
               <Button
                 onClick={handleCloneVoiceAndSynthesize}
-                // Disable if any global loading, no voice sample, or no usable prepared text
                 disabled={anyLoading || !selectedVoiceSample || !isPreparedTextUsable()}
                 className="w-full sm:w-auto"
               >
@@ -734,7 +668,6 @@ export default function Home() {
                     onClick={handlePlaySimulatedClonedVoice}
                     variant="outline"
                     size="sm"
-                    // Disable if any global loading, no text for simulated voice, or standard TTS is speaking
                     disabled={anyLoading || !textForSimulatedClonedVoiceRef.current || isSpeakingRef.current}
                    >
                      {isCurrentSimulatedClonedVoiceSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Simulated Voice</> : <><Volume2 className="mr-2 h-4 w-4" />Play Simulated Cloned Voice</>}
@@ -781,7 +714,6 @@ export default function Home() {
 
               <Button
                 onClick={handleAnimateFace}
-                 // Disable if any global loading, no selectedImage from first section, or no audio source
                 disabled={anyLoading || !selectedImage || (!isPreparedTextUsable() && !textForSimulatedClonedVoiceRef.current)}
                 className="w-full sm:w-auto"
               >
@@ -809,7 +741,7 @@ export default function Home() {
                     </div>
                   ) : mockVideoPlayerImage ? (
                     <Image
-                      key={mockVideoPlayerImage} // Key ensures re-render if src changes to same value but needs refresh
+                      key={mockVideoPlayerImage} 
                       src={mockVideoPlayerImage}
                       alt="Mock video placeholder"
                       width={640}
@@ -828,7 +760,6 @@ export default function Home() {
                 {!isAnimatingFace && animatedVideoResult && (
                   <div className="mt-3 space-y-2">
                     <p className="text-sm whitespace-pre-wrap text-foreground/80 bg-background/50 p-3 rounded-md shadow-sm">{animatedVideoResult}</p>
-                    {/* Playback buttons for the audio used in animation */}
                     {!textForSimulatedClonedVoiceRef.current && isPreparedTextUsable() && isSpeechSupported && (
                        <Button
                          onClick={handleSpeakPreparedText}
@@ -866,3 +797,4 @@ export default function Home() {
   );
 }
 
+    

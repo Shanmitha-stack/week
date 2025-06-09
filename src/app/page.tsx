@@ -241,14 +241,14 @@ export default function Home() {
     }
   };
   
-
-  const isPreparedTextUsable = useCallback(() => {
+  // Regular function, not useCallback, to ensure it always uses the latest ref value.
+  const isPreparedTextUsable = () => {
     const currentPreparedText = preparedSpeechTextRef.current; 
     return currentPreparedText &&
            currentPreparedText.trim() !== "" &&
            !currentPreparedText.toLowerCase().startsWith("no text was provided") &&
            !currentPreparedText.toLowerCase().startsWith("error:");
-  }, []); 
+  };
 
   const handleSpeakPreparedText = useCallback(() => {
     if (!isSpeechSupported) {
@@ -266,19 +266,19 @@ export default function Home() {
       return;
     }
     
-    if (textToSpeak && isPreparedTextUsable()) {
+    if (textToSpeak && isPreparedTextUsable()) { // isPreparedTextUsable will now be fresh
       console.log('[handleSpeakPreparedText] Attempting to PLAY standard TTS with text:', textToSpeak);
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
         console.log('[handleSpeakPreparedText] Cancelling other/pending browser speech before playing new standard TTS.');
         window.speechSynthesis.cancel();
       }
       
-      setIsSpeaking(true);
+      setIsSpeaking(true); // Set intent immediately
       setSpeakingText(textToSpeak); 
-      setIsSimulatedClonedVoiceSpeaking(false); 
+      setIsSimulatedClonedVoiceSpeaking(false); // Ensure other speech is marked off
 
       setTimeout(() => {
-        if (!isSpeakingRef.current || speakingTextRef.current !== textToSpeak) {
+        if (!isSpeakingRef.current || speakingTextRef.current !== textToSpeak) { // Check ref before speaking
           console.log('[handleSpeakPreparedText] Speak request was cancelled or text changed before execution. Current isSpeakingRef:', isSpeakingRef.current, 'Current speakingTextRef:', speakingTextRef.current, 'Target textToSpeak:', textToSpeak);
            if (isSpeakingRef.current && speakingTextRef.current !== textToSpeak) { 
               setIsSpeaking(false); 
@@ -312,7 +312,7 @@ export default function Home() {
     } else {
       toast({ title: "Nothing to Speak", description: "There is no suitable prepared text to speak.", variant: "default" });
     }
-  }, [isSpeechSupported, toast, isPreparedTextUsable]);
+  }, [isSpeechSupported, toast]); // isPreparedTextUsable is stable as it's defined outside useCallback
 
 
   const handleVoiceSampleChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -339,8 +339,8 @@ export default function Home() {
 
     console.log('[handleCloneVoiceAndSynthesize] Initiated.');
     console.log('[handleCloneVoiceAndSynthesize] Selected voice sample:', selectedVoiceSample?.name);
-    const currentPreparedTextIsUsable = isPreparedTextUsable(); 
-    console.log('[handleCloneVoiceAndSynthesize] Is prepared text usable at start:', currentPreparedTextIsUsable);
+    const currentPreparedTextIsUsableAtStart = isPreparedTextUsable(); // Uses fresh check
+    console.log('[handleCloneVoiceAndSynthesize] Is prepared text usable at start:', currentPreparedTextIsUsableAtStart);
     const currentPreparedSpeechTextValue = preparedSpeechTextRef.current; 
     console.log('[handleCloneVoiceAndSynthesize] Current preparedSpeechText at start (from ref):', currentPreparedSpeechTextValue);
 
@@ -350,7 +350,7 @@ export default function Home() {
       setIsCloningVoice(false);
       return;
     }
-    if (!currentPreparedTextIsUsable || !currentPreparedSpeechTextValue) { 
+    if (!currentPreparedTextIsUsableAtStart || !currentPreparedSpeechTextValue) { 
       toast({ title: "Prepared Speech Text Required", description: "Please process some text for speech first. Voice cloning needs text to synthesize.", variant: "destructive" });
       console.warn('[handleCloneVoiceAndSynthesize] Aborted: Prepared text is not usable or null. Value was:', currentPreparedSpeechTextValue);
       setIsCloningVoice(false);
@@ -378,6 +378,7 @@ export default function Home() {
       
       await new Promise(resolve => setTimeout(resolve, 2000)); 
 
+      // Use the value captured at the start for consistency
       if (currentPreparedSpeechTextValue && 
           currentPreparedSpeechTextValue.trim() !== "" &&
           !currentPreparedSpeechTextValue.toLowerCase().startsWith("no text was provided") &&
@@ -422,6 +423,7 @@ export default function Home() {
         console.log('[handlePlaySimulatedClonedVoice] Attempting to STOP simulated cloned voice because it is currently speaking.');
         window.speechSynthesis.cancel();
         setIsSimulatedClonedVoiceSpeaking(false);
+        // No need to set text to null here, it should persist
         return;
     }
 
@@ -431,17 +433,18 @@ export default function Home() {
         window.speechSynthesis.cancel();
     }
     
-    setIsSimulatedClonedVoiceSpeaking(true);
+    setIsSimulatedClonedVoiceSpeaking(true); // Set intent immediately
     setIsSpeaking(false); 
     setSpeakingText(null); 
 
     setTimeout(() => {
-        if (!isSimulatedClonedVoiceSpeakingRef.current) {
+        if (!isSimulatedClonedVoiceSpeakingRef.current) { // Check ref before speaking
             console.log('[handlePlaySimulatedClonedVoice] setTimeout: Play request for simulated cloned voice was cancelled before execution. Current isSimulatedClonedVoiceSpeakingRef:', isSimulatedClonedVoiceSpeakingRef.current);
             return;
         }
+        // Also check if the text itself has changed (e.g., due to another action invalidating it)
         if (textForSimulatedClonedVoiceRef.current !== currentTextForSimulated) {
-            console.log('[handlePlaySimulatedClonedVoice] setTimeout: Text for simulated voice changed before execution. Aborting.');
+            console.log('[handlePlaySimulatedClonedVoice] setTimeout: Text for simulated voice changed before execution. Aborting. Expected:', currentTextForSimulated, 'Got:', textForSimulatedClonedVoiceRef.current);
             setIsSimulatedClonedVoiceSpeaking(false);
             return;
         }
@@ -480,7 +483,7 @@ export default function Home() {
     }
     
     const currentTextForSimulatedVal = textForSimulatedClonedVoiceRef.current; 
-    const currentPreparedTextIsUsableVal = isPreparedTextUsable(); 
+    const currentPreparedTextIsUsableVal = isPreparedTextUsable();  // Uses fresh check
     const currentPreparedSpeechTextVal = preparedSpeechTextRef.current; 
 
     const audioSourceText = currentTextForSimulatedVal ? "simulated cloned audio" : (currentPreparedTextIsUsableVal ? "prepared speech text" : null);
@@ -532,7 +535,9 @@ export default function Home() {
       
       console.log('[handleAnimateFace] Mock processing complete. Setting animation results.');
       setAnimatedVideoResult(mockVideoOutputMessage);
-      const placeholderImageUrl = `https://placehold.co/640x360.png?t=${new Date().getTime()}`; 
+      // Ensure a unique URL for the placeholder to force re-render if the image content *could* change
+      // For now, it's just a generic placeholder, so timestamp might be overkill but good for future.
+      const placeholderImageUrl = `https://placehold.co/640x360.png?t=${Date.now()}`; 
       setMockVideoPlayerImage(placeholderImageUrl);
       console.log('[handleAnimateFace] mockVideoPlayerImage set to:', placeholderImageUrl);
       console.log('[handleAnimateFace] animatedVideoResult set to:', mockVideoOutputMessage);
@@ -550,8 +555,9 @@ export default function Home() {
   };
 
   const anyLoading = isGeneratingSpeech || isCloningVoice || isAnimatingFace;
-  const isCurrentPreparedTextSpeaking = isSpeakingRef.current && speakingTextRef.current === preparedSpeechTextRef.current;
-  const isCurrentSimulatedClonedVoiceSpeaking = isSimulatedClonedVoiceSpeakingRef.current && textForSimulatedClonedVoiceRef.current;
+  // These are used for UI, so they should reflect the *current ref values* for responsiveness
+  const isCurrentPreparedTextSpeaking = isSpeakingRef.current && speakingTextRef.current === preparedSpeechTextRef.current && preparedSpeechTextRef.current !== null;
+  const isCurrentSimulatedClonedVoiceSpeaking = isSimulatedClonedVoiceSpeakingRef.current && textForSimulatedClonedVoiceRef.current !== null;
 
 
   return (
@@ -796,5 +802,7 @@ export default function Home() {
     </div>
   );
 }
+
+    
 
     

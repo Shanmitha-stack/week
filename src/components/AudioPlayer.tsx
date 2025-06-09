@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { FC } from 'react';
@@ -22,7 +23,8 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
   const [prevVolume, setPrevVolume] = useState(0.5);
 
   useEffect(() => {
-    if (src) {
+    // Treat null, undefined, or empty/whitespace-only src as invalid
+    if (src && src.trim() !== "") {
       const newAudio = new Audio(src);
       audioRef.current = newAudio;
       setIsLoading(true);
@@ -46,13 +48,23 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
       const handleCanPlayThrough = () => {
         setIsLoading(false);
         if (autoPlay && audioRef.current) {
-          audioRef.current.play().catch(error => console.error("Autoplay failed:", error));
+          audioRef.current.play().catch(error => console.error("AudioPlayer: Autoplay failed:", error));
           setIsPlaying(true);
         }
       };
       const handleError = (e: Event) => {
         setIsLoading(false);
-        console.error("Audio Player Error: ", (e.target as HTMLAudioElement).error);
+        const audioElement = e.target as HTMLAudioElement;
+        const mediaError = audioElement.error;
+        console.error(
+          "AudioPlayer Error Details:",
+          {
+            code: mediaError?.code,
+            message: mediaError?.message,
+            currentSrc: audioElement.currentSrc,
+            srcAttempted: audioElement.src, // or just src prop value if needed
+          }
+        );
       };
       const handleLoadStart = () => setIsLoading(true);
 
@@ -74,13 +86,30 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
         newAudio.removeEventListener('loadstart', handleLoadStart);
         if (audioRef.current) {
           audioRef.current.pause();
-          audioRef.current.src = '';
+          // It's good practice to remove the src to prevent further loading attempts by the browser for the old object
+          if (audioRef.current.src) { // Check if src is already set
+             try {
+                audioRef.current.src = ''; // Detach source
+             } catch (err) {
+                // some browsers might throw error when src is set to empty on unmounted element
+             }
+          }
+          audioRef.current.removeAttribute('src'); // More robust way to clear
+          audioRef.current.load(); // Abort pending/ongoing network requests for the audio element
           audioRef.current = null;
         }
       };
     } else {
+      // Handles null, undefined, or empty/whitespace-only src
       if (audioRef.current) {
         audioRef.current.pause();
+        if (audioRef.current.src) {
+           try {
+              audioRef.current.src = '';
+           } catch(err) {/* ignore */}
+        }
+        audioRef.current.removeAttribute('src');
+        audioRef.current.load();
         audioRef.current = null;
       }
       setIsPlaying(false);
@@ -89,7 +118,7 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
       setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, autoPlay]);
+  }, [src, autoPlay]); // autoPlay is a dependency
 
   useEffect(() => {
     if (audioRef.current) {
@@ -108,7 +137,7 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
   };
 
   const handleSeek = (value: number[]) => {
-    if (audioRef.current && !isLoading) {
+    if (audioRef.current && !isLoading && duration > 0) { // ensure duration is valid
       const newTime = value[0];
       audioRef.current.currentTime = newTime;
       setCurrentTime(newTime);
@@ -146,20 +175,25 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
     return <Volume2 className="h-5 w-5" />;
   };
   
-  if (!src && !audioRef.current && !isLoading) return null;
+  // Do not render if src is invalid AND not loading AND audioRef is not set
+  // This condition helps prevent rendering when the component is essentially inactive or errored early.
+  if ((!src || src.trim() === "") && !isLoading && !audioRef.current) {
+    return null;
+  }
+
 
   return (
     <div className="flex items-center gap-3 p-3 border rounded-lg shadow-sm bg-card w-full">
-      <Button onClick={togglePlayPause} variant="ghost" size="icon" disabled={isLoading || !src} aria-label={isPlaying ? "Pause" : "Play"}>
+      <Button onClick={togglePlayPause} variant="ghost" size="icon" disabled={isLoading || (!src || src.trim() === "")} aria-label={isPlaying ? "Pause" : "Play"}>
         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
       </Button>
       <div className="flex-grow mx-2">
         <Slider
           value={[currentTime]}
-          max={duration || 1}
+          max={duration > 0 ? duration : 1} // Prevent max 0 for slider
           step={0.1}
           onValueChange={handleSeek}
-          disabled={isLoading || !src || duration === 0}
+          disabled={isLoading || (!src || src.trim() === "") || duration === 0}
           aria-label="Audio progress"
         />
         <div className="flex justify-between text-xs text-muted-foreground mt-1">
@@ -168,7 +202,7 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
         </div>
       </div>
       <div className="flex items-center gap-2 w-32">
-        <Button onClick={toggleMute} variant="ghost" size="icon" disabled={isLoading || !src} aria-label={isMuted ? "Unmute" : "Mute"}>
+        <Button onClick={toggleMute} variant="ghost" size="icon" disabled={isLoading || (!src || src.trim() === "")} aria-label={isMuted ? "Unmute" : "Mute"}>
           <VolumeIconDisplay />
         </Button>
         <Slider
@@ -176,7 +210,7 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
             max={1}
             step={0.01}
             onValueChange={handleVolumeChange}
-            disabled={isLoading || !src}
+            disabled={isLoading || (!src || src.trim() === "")}
             aria-label="Volume"
             className="w-full"
         />
@@ -186,3 +220,5 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
 };
 
 export default AudioPlayer;
+
+    

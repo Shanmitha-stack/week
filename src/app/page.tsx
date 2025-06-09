@@ -45,14 +45,40 @@ export default function Home() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
       setIsSpeechSupported(true);
+      console.log('Speech synthesis supported.');
+
+      const logVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        console.log('Available speech synthesis voices:', voices);
+        if (voices.length === 0) {
+          console.warn('No speech synthesis voices currently available. They might load asynchronously.');
+        }
+      };
+
+      logVoices(); // Initial check
+      if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = () => {
+          console.log('Speech synthesis voices changed.');
+          logVoices();
+        };
+      } else {
+        // Fallback for browsers that might not support onvoiceschanged consistently, or if voices load very quickly
+        setTimeout(logVoices, 500); // Log again after a short delay
+      }
+
+    } else {
+      setIsSpeechSupported(false);
+      console.warn('Speech synthesis not supported by this browser.');
     }
+
     return () => {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
          if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
           window.speechSynthesis.cancel();
         }
+        window.speechSynthesis.onvoiceschanged = null; // Clean up listener
       }
       setIsSpeaking(false);
       setSpeakingText(null);
@@ -66,14 +92,12 @@ export default function Home() {
     setMockVideoPlayerImage(null);
     setTextForSimulatedClonedVoice(null);
 
-    if (isSpeaking || isSimulatedClonedVoiceSpeaking) {
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-      setIsSpeaking(false);
-      setSpeakingText(null);
-      setIsSimulatedClonedVoiceSpeaking(false);
+    if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+      window.speechSynthesis.cancel();
     }
+    setIsSpeaking(false);
+    setSpeakingText(null);
+    setIsSimulatedClonedVoiceSpeaking(false);
   };
 
 
@@ -90,7 +114,7 @@ export default function Home() {
       setSelectedImage(null);
       setImagePreview(null);
     }
-    resetAllOutputs();
+    resetAllOutputs(); 
   };
 
   const toDataURL = (file: File): Promise<string> =>
@@ -110,16 +134,19 @@ export default function Home() {
     if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending) ) {
       window.speechSynthesis.cancel();
     }
+    // Reset all speech states
     setIsSpeaking(false);
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
     
 
     setIsGeneratingSpeech(true);
-    setPreparedSpeechText(null);
-    setAnimatedVideoResult(null);
+    // Reset all outputs except those directly tied to this process
+    setPreparedSpeechText(null); 
+    setAnimatedVideoResult(null); 
     setMockVideoPlayerImage(null);
-    setTextForSimulatedClonedVoice(null);
+    setTextForSimulatedClonedVoice(null); 
+
 
     let imageDataUri: string | undefined = undefined;
     if (selectedImage) {
@@ -143,23 +170,27 @@ export default function Home() {
                           !preparedText.toLowerCase().startsWith("error:");
 
       if (isSpeechSupported && shouldSpeak) {
-        const utterance = new SpeechSynthesisUtterance(preparedText);
-        utterance.onstart = () => {
-          setIsSpeaking(true);
-          setSpeakingText(preparedText);
-          setIsSimulatedClonedVoiceSpeaking(false); // Ensure other flag is off
-        };
-        utterance.onend = () => {
-          setIsSpeaking(false);
-          setSpeakingText(null);
-        };
-        utterance.onerror = (event) => {
-          console.error("Speech synthesis error. Code:", event.error, "Event details:", event);
-          toast({ title: "Speech Error", description: "Could not play speech automatically. You can try the 'Speak' button.", variant: "destructive" });
-          setIsSpeaking(false);
-          setSpeakingText(null);
-        };
-        window.speechSynthesis.speak(utterance);
+        // Delay speech to allow UI updates and cancel to complete
+        setTimeout(() => {
+            const utterance = new SpeechSynthesisUtterance(preparedText);
+            utterance.onstart = () => {
+              setIsSpeaking(true);
+              setSpeakingText(preparedText);
+              setIsSimulatedClonedVoiceSpeaking(false); 
+            };
+            utterance.onend = () => {
+              setIsSpeaking(false);
+              setSpeakingText(null);
+            };
+            utterance.onerror = (event) => {
+              console.error("Speech synthesis error (handleTextToSpeech). Code:", event.error, "Event details:", event);
+              toast({ title: "Speech Error", description: "Could not play speech automatically. You can try the 'Speak' button.", variant: "destructive" });
+              setIsSpeaking(false);
+              setSpeakingText(null);
+            };
+            window.speechSynthesis.speak(utterance);
+        }, 100);
+
         toast({
           title: "Processing Complete",
           description: "Speaking the prepared text...",
@@ -168,7 +199,7 @@ export default function Home() {
       } else if (shouldSpeak) {
         toast({
           title: "Input Processed",
-          description: `Prepared text: "${preparedText.substring(0,100)}${preparedText.length > 100 ? '...' : ''}". Browser speech synthesis not supported.`,
+          description: `Prepared text: "${preparedText.substring(0,100)}${preparedText.length > 100 ? '...' : ''}". Browser speech synthesis not supported or text not suitable for auto-play.`,
           duration: 6000,
         });
       } else {
@@ -201,10 +232,11 @@ export default function Home() {
 
     const textToSpeak = preparedSpeechText;
 
-    if (isSpeaking && speakingText === textToSpeak) {
+    if (isSpeaking && speakingText === textToSpeak) { // If already speaking this specific text, stop it
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
       setSpeakingText(null);
+      // setIsSimulatedClonedVoiceSpeaking(false); // Already handled by the speaking logic
       return;
     }
     
@@ -222,7 +254,7 @@ export default function Home() {
         utterance.onstart = () => {
           setIsSpeaking(true);
           setSpeakingText(textToSpeak);
-          setIsSimulatedClonedVoiceSpeaking(false); // Redundant but safe
+          setIsSimulatedClonedVoiceSpeaking(false);
         };
         utterance.onend = () => {
           setIsSpeaking(false);
@@ -235,7 +267,7 @@ export default function Home() {
           setSpeakingText(null);
         };
         window.speechSynthesis.speak(utterance);
-      }, 100); // Increased timeout
+      }, 100);
     } else {
       toast({ title: "Nothing to Speak", description: "There is no suitable prepared text to speak.", variant: "default" });
     }
@@ -247,16 +279,17 @@ export default function Home() {
     if (file) setSelectedVoiceSample(file);
     else setSelectedVoiceSample(null);
     
+    // Reset outputs that depend on voice cloning or its source text
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
     setTextForSimulatedClonedVoice(null);
 
-    if (isSpeaking || isSimulatedClonedVoiceSpeaking) {
-        if(typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-        setSpeakingText(null);
-        setIsSimulatedClonedVoiceSpeaking(false);
+    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeaking || isSimulatedClonedVoiceSpeaking)) {
+        window.speechSynthesis.cancel();
     }
+    setIsSpeaking(false);
+    setSpeakingText(null);
+    setIsSimulatedClonedVoiceSpeaking(false);
   };
 
 
@@ -270,20 +303,19 @@ export default function Home() {
       return;
     }
     
-    if (isSpeaking || isSimulatedClonedVoiceSpeaking) {
-        if(typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-        setSpeakingText(null);
-        setIsSimulatedClonedVoiceSpeaking(false);
+    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeaking || isSimulatedClonedVoiceSpeaking)) {
+        window.speechSynthesis.cancel();
     }
+    setIsSpeaking(false);
+    setSpeakingText(null);
+    setIsSimulatedClonedVoiceSpeaking(false);
 
     setIsCloningVoice(true);
-    setTextForSimulatedClonedVoice(null);
-    setAnimatedVideoResult(null);
+    toast({ title: "Mock Voice Cloning", description: "Initializing voice cloning process..." });
+    setTextForSimulatedClonedVoice(null); // Clear previous cloned text
+    setAnimatedVideoResult(null); // Clear animation as it depends on audio
     setMockVideoPlayerImage(null);
     
-    toast({ title: "Mock Voice Cloning", description: "Initializing voice cloning process..." });
-
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
       toast({ title: "Mock Voice Cloning", description: "Processing voice sample..." });
@@ -302,6 +334,12 @@ export default function Home() {
   };
 
   const handlePlaySimulatedClonedVoice = useCallback(() => {
+    console.log('[handlePlaySimulatedClonedVoice] triggered.');
+    console.log('isSpeechSupported:', isSpeechSupported);
+    console.log('textForSimulatedClonedVoice:', textForSimulatedClonedVoice);
+    console.log('isSimulatedClonedVoiceSpeaking (current):', isSimulatedClonedVoiceSpeaking);
+    console.log('isSpeaking (other TTS):', isSpeaking);
+
     if (!isSpeechSupported) {
         toast({ title: "Speech Not Supported", description: "Your browser does not support speech synthesis.", variant: "destructive" });
         return;
@@ -311,39 +349,45 @@ export default function Home() {
         return;
     }
 
-    if (isSimulatedClonedVoiceSpeaking) {
+    if (isSimulatedClonedVoiceSpeaking) { // If already speaking this specific type, stop it
+        console.log('[handlePlaySimulatedClonedVoice] Attempting to STOP cloned voice.');
         window.speechSynthesis.cancel();
         setIsSimulatedClonedVoiceSpeaking(false);
         return;
     }
 
-    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+    console.log('[handlePlaySimulatedClonedVoice] Attempting to PLAY cloned voice.');
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) { // If any other speech is happening, cancel it
+        console.log('[handlePlaySimulatedClonedVoice] Cancelling other speech before playing cloned voice.');
         window.speechSynthesis.cancel();
     }
     // Reset all speech states before starting new
     setIsSpeaking(false);
     setSpeakingText(null);
-    setIsSimulatedClonedVoiceSpeaking(false); 
+    setIsSimulatedClonedVoiceSpeaking(false); // Will be set to true in onstart
 
     setTimeout(() => {
+        console.log('[handlePlaySimulatedClonedVoice] setTimeout: Speaking now with text:', textForSimulatedClonedVoice);
         const utterance = new SpeechSynthesisUtterance(textForSimulatedClonedVoice);
         utterance.onstart = () => {
+            console.log('[handlePlaySimulatedClonedVoice] Utterance started.');
             setIsSimulatedClonedVoiceSpeaking(true);
-            setIsSpeaking(false); // Ensure other flag is off
+            setIsSpeaking(false); 
             setSpeakingText(null);
         };
         utterance.onend = () => {
+            console.log('[handlePlaySimulatedClonedVoice] Utterance ended.');
             setIsSimulatedClonedVoiceSpeaking(false);
         };
         utterance.onerror = (event) => {
-            console.error("Speech synthesis error (Simulated Cloned). Code:", event.error, "Event details:", event);
-            toast({ title: "Speech Error", description: "Could not play simulated cloned voice.", variant: "destructive" });
-            setIsSimulatedClonedVoiceSpeaking(false);
+            console.error("[handlePlaySimulatedClonedVoice] Speech synthesis error (Simulated Cloned). Code:", event.error, "Event details:", event);
+            toast({ title: "Speech Error", description: "Could not play simulated cloned voice. Check console for details.", variant: "destructive" });
+            setIsSimulatedClonedVoiceSpeaking(false); // Ensure reset on error
         };
         window.speechSynthesis.speak(utterance);
-    }, 100); // Increased timeout
+    }, 100);
 
-  }, [isSpeechSupported, textForSimulatedClonedVoice, isSimulatedClonedVoiceSpeaking, toast, isSpeaking, speakingText]);
+  }, [isSpeechSupported, textForSimulatedClonedVoice, isSimulatedClonedVoiceSpeaking, toast, isSpeaking]);
 
 
   const handleStaticFaceImageChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -359,7 +403,7 @@ export default function Home() {
       setStaticFaceImage(null);
       setStaticFaceImagePreview(null);
     }
-    setAnimatedVideoResult(null);
+    setAnimatedVideoResult(null); // Reset animation if face image changes
     setMockVideoPlayerImage(null);
   };
 
@@ -369,18 +413,18 @@ export default function Home() {
       return;
     }
 
-    const audioSourceText = textForSimulatedClonedVoice ? "simulated cloned audio" : (isPreparedTextUsable ? "prepared speech text" : "valid audio source");
-    if (!isPreparedTextUsable && !textForSimulatedClonedVoice) {
+    const audioSourceText = textForSimulatedClonedVoice ? "simulated cloned audio" : (isPreparedTextUsable ? "prepared speech text" : null);
+    if (!audioSourceText) {
        toast({ title: "Audio Source Required", description: `Please process text for speech or perform mock voice cloning first. The animation needs an audio context.`, variant: "destructive" });
       return;
     }
     
-    if (isSpeaking || isSimulatedClonedVoiceSpeaking) {
-        if(typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-        setSpeakingText(null);
-        setIsSimulatedClonedVoiceSpeaking(false);
+    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeaking || isSimulatedClonedVoiceSpeaking)) {
+        window.speechSynthesis.cancel();
     }
+    setIsSpeaking(false);
+    setSpeakingText(null);
+    setIsSimulatedClonedVoiceSpeaking(false);
 
     setIsAnimatingFace(true);
     setAnimatedVideoResult(null);
@@ -400,9 +444,9 @@ export default function Home() {
       let voiceInfo = '';
       if (textForSimulatedClonedVoice && selectedVoiceSample) {
         voiceInfo = ` (simulated with custom voice from "${selectedVoiceSample.name}")`;
-      } else if (isPreparedTextUsable && selectedVoiceSample) {
+      } else if (isPreparedTextUsable && selectedVoiceSample) { // if standard TTS was used, but a sample was available for context
         voiceInfo = ` (standard browser TTS used, voice sample "${selectedVoiceSample.name}" was available for context)`;
-      } else if (isPreparedTextUsable) {
+      } else if (isPreparedTextUsable) { // if standard TTS was used, and no sample was involved
         voiceInfo = ` (standard browser TTS used)`;
       }
 
@@ -488,7 +532,7 @@ export default function Home() {
                         onClick={handleSpeakPreparedText}
                         variant="outline"
                         size="sm"
-                        disabled={anyLoading || (!isCurrentPreparedTextSpeaking && !isPreparedTextUsable && !isSimulatedClonedVoiceSpeaking) }
+                        disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!isCurrentPreparedTextSpeaking && !isPreparedTextUsable) }
                       >
                         {isSpeaking && speakingText === preparedSpeechText ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
                       </Button>
@@ -497,7 +541,7 @@ export default function Home() {
                   <p className="text-base whitespace-pre-wrap text-foreground/90">{preparedSpeechText}</p>
                    {!isSpeechSupported && isPreparedTextUsable && (
                     <p className="mt-3 text-sm text-muted-foreground italic">
-                      Your browser does not support speech synthesis.
+                      Your browser does not support speech synthesis for direct playback here.
                     </p>
                   )}
                 </div>
@@ -549,9 +593,9 @@ export default function Home() {
               )}
               <p className="text-sm text-muted-foreground pt-2">
                 This section demonstrates the UI for voice cloning.
-                1. First, use "Process Input for Speech" in the section above to prepare text.
+                1. First, use "Process Input for Speech" in the section above to prepare text. This makes the prepared text available.
                 2. Then, upload a voice sample here.
-                3. Finally, click "Generate Speech with Cloned Voice (Mock)". This simulates a backend voice cloning process and allows simulated playback of the prepared text. Actual voice cloning is not implemented.
+                3. Finally, click "Generate Speech with Cloned Voice (Mock)". This simulates a backend voice cloning process and makes the previously prepared text available for simulated playback using the button above. Actual voice cloning is not implemented.
               </p>
             </div>
           </SectionCard>
@@ -632,10 +676,10 @@ export default function Home() {
                     <p className="text-sm whitespace-pre-wrap text-foreground/80 bg-background/50 p-3 rounded-md shadow-sm">{animatedVideoResult}</p>
                     {!textForSimulatedClonedVoice && isPreparedTextUsable && isSpeechSupported && (
                        <Button
-                         onClick={handleSpeakPreparedText}
+                         onClick={handleSpeakPreparedText} // Re-uses the standard TTS playback for the animation's audio
                          variant="outline"
                          size="sm"
-                         disabled={anyLoading || (!isCurrentPreparedTextSpeaking && !isPreparedTextUsable && !isSimulatedClonedVoiceSpeaking)}
+                         disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!isCurrentPreparedTextSpeaking && !isPreparedTextUsable) }
                         >
                         {isSpeaking && speakingText === preparedSpeechText ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking Animation Audio</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (TTS)</>}
                       </Button>

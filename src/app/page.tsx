@@ -45,7 +45,7 @@ export default function Home() {
     }
     return () => {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
-        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+         if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
           window.speechSynthesis.cancel();
         }
       }
@@ -68,10 +68,6 @@ export default function Home() {
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
     setClonedAudioUrl(null);
-    // If an image is changed, any previously prepared text might need re-evaluation,
-    // so we clear preparedSpeechText here to force reprocessing.
-    // Alternatively, one might choose to keep it if the text is independent.
-    // For this app, let's assume changing the image means re-preparing.
     setPreparedSpeechText(null); 
   };
 
@@ -351,7 +347,7 @@ export default function Home() {
                   </div>
                 )}
               </div>
-              <Button onClick={handleTextToSpeech} disabled={isGeneratingSpeech} className="w-full sm:w-auto">
+              <Button onClick={handleTextToSpeech} disabled={isGeneratingSpeech || isCloningVoice || isAnimatingFace} className="w-full sm:w-auto">
                 {isGeneratingSpeech ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing Input...</>
                 ) : (
@@ -477,6 +473,7 @@ export default function Home() {
                     </div>
                   ) : mockVideoPlayerImage ? (
                     <Image
+                      key={mockVideoPlayerImage}
                       src={mockVideoPlayerImage}
                       alt="Mock video placeholder"
                       width={640}
@@ -508,5 +505,4 @@ export default function Home() {
       </footer>
     </div>
   );
-
-    
+}

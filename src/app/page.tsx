@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, Mic, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle, Smile } from 'lucide-react';
+import { Text, Mic, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle, Smile, Video } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 
 export default function Home() {
@@ -31,6 +31,8 @@ export default function Home() {
   const [staticFaceImagePreview, setStaticFaceImagePreview] = useState<string | null>(null);
   const [animatedVideoResult, setAnimatedVideoResult] = useState<string | null>(null);
   const [isAnimatingFace, setIsAnimatingFace] = useState<boolean>(false);
+  const [mockVideoPlayerImage, setMockVideoPlayerImage] = useState<string | null>(null);
+
 
   const { toast } = useToast();
 
@@ -60,6 +62,9 @@ export default function Home() {
       setSelectedImage(null);
       setImagePreview(null);
     }
+    // If base image changes, invalidate animation output
+    setAnimatedVideoResult(null);
+    setMockVideoPlayerImage(null);
   };
 
   const toDataURL = (file: File): Promise<string> =>
@@ -83,7 +88,8 @@ export default function Home() {
 
     setIsGeneratingSpeech(true);
     setPreparedSpeechText(null); 
-    setAnimatedVideoResult(null); 
+    setAnimatedVideoResult(null);
+    setMockVideoPlayerImage(null);
 
     let imageDataUri: string | undefined = undefined;
     if (selectedImage) {
@@ -100,6 +106,9 @@ export default function Home() {
     try {
       const { preparedText } = await prepareTextForSpeech({ text: textInput, imageDataUri });
       setPreparedSpeechText(preparedText);
+      // New prepared text invalidates old animation
+      setAnimatedVideoResult(null);
+      setMockVideoPlayerImage(null);
       
       const shouldSpeak = preparedText && 
                           preparedText.trim() !== "" && 
@@ -173,6 +182,9 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (file) setSelectedVoiceSample(file);
     else setSelectedVoiceSample(null);
+     // If voice sample changes, invalidate animation output
+    setAnimatedVideoResult(null);
+    setMockVideoPlayerImage(null);
   };
 
   const handleUploadVoiceSample = async () => {
@@ -199,6 +211,9 @@ export default function Home() {
       setStaticFaceImage(null);
       setStaticFaceImagePreview(null);
     }
+    // If static face image changes, invalidate animation output
+    setAnimatedVideoResult(null);
+    setMockVideoPlayerImage(null);
   };
 
   const handleAnimateFace = async () => {
@@ -216,9 +231,13 @@ export default function Home() {
     }
 
     setIsAnimatingFace(true);
-    setAnimatedVideoResult(null); 
+    setAnimatedVideoResult(null);
+    setMockVideoPlayerImage(null); 
 
-    toast({ title: "Animating Face (Mock)", description: "This is a placeholder. In a real app, this would call a lip-sync service." });
+    toast({ title: "Starting Animation Process", description: "Preprocessing face image..." });
+    await new Promise(resolve => setTimeout(resolve, 1500)); 
+
+    toast({ title: "Processing Animation", description: "Generating lip-sync video with prepared audio..." });
     await new Promise(resolve => setTimeout(resolve, 2500)); 
 
     const preparedTextSnippet = preparedSpeechText!.substring(0, 70) + (preparedSpeechText!.length > 70 ? '...' : '');
@@ -227,11 +246,13 @@ export default function Home() {
       voiceSampleInfo = ` with custom voice from "${selectedVoiceSample.name}"`;
     }
 
-    const mockVideoOutput = `Animation using face image "${staticFaceImage.name}", prepared speech: "${preparedTextSnippet}"${voiceSampleInfo}. The animated video would be displayed here. (Mock Output)`;
-    setAnimatedVideoResult(mockVideoOutput);
+    const mockVideoOutputMessage = `Animation using face image "${staticFaceImage.name}", prepared speech: "${preparedTextSnippet}"${voiceSampleInfo}. The animated video would be displayed here. (Mock Output)`;
+    setAnimatedVideoResult(mockVideoOutputMessage);
+    setMockVideoPlayerImage("https://placehold.co/640x360.png");
+
 
     setIsAnimatingFace(false);
-    toast({ title: "Face Animation Complete (Mock)", description: "Video result (mock) is now available." });
+    toast({ title: "Face Animation Complete (Mock)", description: "Mock video result is now available." });
   };
 
   const canAnimateFace = staticFaceImage && 
@@ -253,7 +274,13 @@ export default function Home() {
                 <Textarea
                   id="text-input"
                   value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
+                  onChange={(e) => {
+                    setTextInput(e.target.value);
+                    // If text input changes, this might invalidate prepared speech and thus animation
+                    setPreparedSpeechText(null);
+                    setAnimatedVideoResult(null);
+                    setMockVideoPlayerImage(null);
+                  }}
                   placeholder="Type or paste your text here..."
                   rows={4}
                   className="text-base mt-1"
@@ -352,16 +379,32 @@ export default function Home() {
                 )}
               </Button>
 
-              {animatedVideoResult && (
+              {isAnimatingFace && (
+                 <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow flex flex-col items-center justify-center">
+                    <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+                    <p className="text-lg font-semibold text-foreground">Processing Animation...</p>
+                 </div>
+              )}
+
+              {!isAnimatingFace && mockVideoPlayerImage && (
                 <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">
-                  <Label className="text-lg font-semibold text-foreground">Animation Output:</Label>
-                  <p className="text-base whitespace-pre-wrap text-foreground/90 mt-2">{animatedVideoResult}</p>
-                  {/* 
-                    Future placeholder for actual video player:
-                    <video controls src={actualVideoUrlFromState} className="w-full rounded-md mt-2">
-                      Your browser does not support the video tag.
-                    </video> 
-                  */}
+                  <Label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-2">
+                    <Video className="h-5 w-5"/>
+                    Mock Animation Output:
+                  </Label>
+                  <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden">
+                     <Image
+                        src={mockVideoPlayerImage}
+                        alt="Mock video placeholder"
+                        width={640}
+                        height={360}
+                        className="object-contain"
+                        data-ai-hint="video placeholder"
+                      />
+                  </div>
+                  {animatedVideoResult && (
+                    <p className="text-sm whitespace-pre-wrap text-foreground/80 mt-3 bg-background/50 p-2 rounded-md">{animatedVideoResult}</p>
+                  )}
                 </div>
               )}
                <p className="text-sm text-muted-foreground mt-4">
@@ -403,3 +446,4 @@ export default function Home() {
     </div>
   );
 }
+

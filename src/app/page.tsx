@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
+import { generateAnimatedFrame } from '@/ai/flows/generate-animated-frame-flow';
 
 export default function Home() {
   const [textInput, setTextInput] = useState<string>('');
@@ -269,12 +270,12 @@ export default function Home() {
       return;
     }
     
-    // Use the function directly to check usability
-    if (textToSpeak && 
-        textToSpeak.trim() !== "" &&
-        !textToSpeak.toLowerCase().startsWith("no text was provided") &&
-        !textToSpeak.toLowerCase().startsWith("error:")
-    ) { 
+    const currentPreparedTextIsUsable = textToSpeak && 
+                                    textToSpeak.trim() !== "" &&
+                                    !textToSpeak.toLowerCase().startsWith("no text was provided") &&
+                                    !textToSpeak.toLowerCase().startsWith("error:");
+
+    if (currentPreparedTextIsUsable) { 
       console.log('[handleSpeakPreparedText] Attempting to PLAY standard TTS with text:', textToSpeak);
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
         console.log('[handleSpeakPreparedText] Cancelling other/pending browser speech before playing new standard TTS.');
@@ -295,7 +296,7 @@ export default function Home() {
           return;
         }
         console.log('[handleSpeakPreparedText] setTimeout: Speaking now with text:', textToSpeak);
-        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        const utterance = new SpeechSynthesisUtterance(textToSpeak!);
         utterance.onstart = () => {
           console.log('[handleSpeakPreparedText] Utterance started.');
           setIsSpeaking(true); 
@@ -344,7 +345,7 @@ export default function Home() {
   };
 
  const isPreparedTextAvailableAndUsable = () => {
-    const currentPreparedText = preparedSpeechText; // Use state directly for this check
+    const currentPreparedText = preparedSpeechText; 
     return currentPreparedText &&
            currentPreparedText.trim() !== "" &&
            !currentPreparedText.toLowerCase().startsWith("no text was provided") &&
@@ -360,7 +361,7 @@ export default function Home() {
     
     const currentPreparedTextIsUsableAtStart = isPreparedTextAvailableAndUsable();
     console.log('[handleCloneVoiceAndSynthesize] Is prepared text usable at start (using direct state):', currentPreparedTextIsUsableAtStart);
-    const currentPreparedSpeechTextValue = preparedSpeechText; // Use direct state
+    const currentPreparedSpeechTextValue = preparedSpeechText; 
     console.log('[handleCloneVoiceAndSynthesize] Current preparedSpeechText at start (from direct state):', currentPreparedSpeechTextValue);
 
 
@@ -398,7 +399,6 @@ export default function Home() {
       
       await new Promise(resolve => setTimeout(resolve, 2000)); 
 
-      // Re-check usability with direct state just before setting, to be absolutely sure
       const stillUsablePreparedText = preparedSpeechText;
       if (stillUsablePreparedText && 
           stillUsablePreparedText.trim() !== "" &&
@@ -508,27 +508,25 @@ export default function Home() {
     !preparedSpeechText.toLowerCase().startsWith("no text was provided") &&
     !preparedSpeechText.toLowerCase().startsWith("error:");
 
-  const hasSimulatedClonedAudio = !!textForSimulatedClonedVoice; // True if textForSimulatedClonedVoice is a non-empty string
-
+  const hasSimulatedClonedAudio = !!(textForSimulatedClonedVoice && textForSimulatedClonedVoice.trim() !== "");
   const isAudioAvailableForAnimation = hasPreparedTextAudio || hasSimulatedClonedAudio;
 
 
   const handleAnimateFace = useCallback(async () => {
-    console.log('[handleAnimateFace] Attempting to animate. Current states used in this callback:');
-    console.log(`  - selectedImage: ${selectedImage ? selectedImage.name : 'null'}`);
+    console.log('[handleAnimateFace] Attempting to animate. Current states:');
+    console.log(`  - selectedImage: ${selectedImage ? selectedImage.name : 'null'}, imagePreview: ${imagePreview ? 'available' : 'null'}`);
     console.log(`  - preparedSpeechText (state): "${preparedSpeechText}"`);
     console.log(`  - textForSimulatedClonedVoice (state): "${textForSimulatedClonedVoice}"`);
     console.log(`  - selectedVoiceSample: ${selectedVoiceSample ? selectedVoiceSample.name : 'null'}`);
     
-    // Re-derive these booleans inside the callback using current state for maximum accuracy at time of execution
     const currentHasPreparedTextAudio = preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && !preparedSpeechText.toLowerCase().startsWith("error:");
-    const currentHasSimulatedClonedAudio = !!textForSimulatedClonedVoice;
+    const currentHasSimulatedClonedAudio = !!(textForSimulatedClonedVoice && textForSimulatedClonedVoice.trim() !== "");
     console.log(`  - Derived currentHasPreparedTextAudio: ${currentHasPreparedTextAudio}`);
     console.log(`  - Derived currentHasSimulatedClonedAudio: ${currentHasSimulatedClonedAudio}`);
 
-    if (!selectedImage) { 
+    if (!selectedImage || !imagePreview) { 
       toast({ title: "Image Required for Animation", description: "Please upload an image in the 'Text & Image to Speech Preparation' section. That image will be used for animation.", variant: "destructive" });
-      console.log('[handleAnimateFace] Aborted: No image selected.');
+      console.log('[handleAnimateFace] Aborted: No image selected or no image preview URI.');
       return;
     }
     
@@ -540,7 +538,7 @@ export default function Home() {
 
     if (!audioSourceForAnimation) {
        toast({ title: "Audio Source Required", description: "Audio source required. Please use 'Process Input for Speech' or 'Generate Speech with Cloned Voice (Mock)' first, then try animating.", variant: "destructive" });
-       console.log('[handleAnimateFace] Aborted: No audio source text available (neither prepared text nor simulated cloned audio).');
+       console.log('[handleAnimateFace] Aborted: No audio source text available.');
       return;
     }
     
@@ -557,18 +555,27 @@ export default function Home() {
     setMockVideoPlayerImage(null); 
 
     try {
-      toast({ title: "Starting Animation Process", description: "Preprocessing face image..." });
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      toast({ title: "Starting Mock Animation Process", description: "Preprocessing face image (simulated)..." });
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Shortened preprocessing
 
-      toast({ title: "Processing Animation", description: `Generating lip-sync video with ${audioSourceForAnimation}...` });
-      await new Promise(resolve => setTimeout(resolve, 2500));
-
-      const audioTextForMessage = currentHasSimulatedClonedAudio && textForSimulatedClonedVoice 
+      let animationCreativePrompt = `Generate a single, still image frame of the person in the provided photo, looking as if they are part of a video and speaking. `;
+      const audioTextContext = currentHasSimulatedClonedAudio && textForSimulatedClonedVoice 
         ? textForSimulatedClonedVoice 
-        : (currentHasPreparedTextAudio && preparedSpeechText ? preparedSpeechText : "available audio context");
+        : (currentHasPreparedTextAudio && preparedSpeechText ? preparedSpeechText : "");
+      
+      if (audioTextContext) {
+        animationCreativePrompt += `They might be saying something like: "${audioTextContext.substring(0, 100)}...".`;
+      }
+      animationCreativePrompt += ` The style should be consistent with the input photo, suitable for a video frame. Do not add text overlays or speech bubbles to the image. Focus on a natural expression.`;
+      
+      toast({ title: "Generating Mock Animation Frame", description: "Using AI to create a dynamic placeholder frame..." });
+      
+      const frameResult = await generateAnimatedFrame({
+        originalImageDataUri: imagePreview as string, 
+        animationPrompt: animationCreativePrompt,
+      });
 
-      const audioContextMessageSegment = `audio based on text: "${audioTextForMessage.substring(0,70)}..."`;
-        
+      const audioContextMessageSegment = `audio based on text: "${audioTextContext.substring(0,70)}..."`;
       let voiceInfoSegment = '';
       if (currentHasSimulatedClonedAudio && selectedVoiceSample) {
         voiceInfoSegment = ` (simulated with custom voice from "${selectedVoiceSample.name}")`;
@@ -578,29 +585,32 @@ export default function Home() {
         voiceInfoSegment = ` (standard browser TTS used)`;
       }
 
-      const mockVideoOutputMessage = `Animation using image "${selectedImage.name}", with ${audioContextMessageSegment}${voiceInfoSegment}. The animated video would be displayed here. (Mock Output)`;
-      
-      console.log('[handleAnimateFace] Mock processing complete. Setting animation results.');
-      setAnimatedVideoResult(mockVideoOutputMessage);
-      const placeholderImageUrl = `https://placehold.co/640x360.png?t=${Date.now()}`; 
-      setMockVideoPlayerImage(placeholderImageUrl);
-      console.log('[handleAnimateFace] mockVideoPlayerImage set to:', placeholderImageUrl);
-      console.log('[handleAnimateFace] animatedVideoResult set to:', mockVideoOutputMessage);
+      if (frameResult.generatedFrameDataUri) {
+        setMockVideoPlayerImage(frameResult.generatedFrameDataUri);
+        const successMessage = `AI-Generated Mock Frame for animation using image "${selectedImage.name}", with ${audioContextMessageSegment}${voiceInfoSegment}. This is a *still image* placeholder. Actual lip-synced video would require a dedicated backend.`;
+        setAnimatedVideoResult(successMessage);
+        toast({ title: "Mock Animation Frame Generated", description: "AI-generated placeholder frame is now available." });
+      } else {
+        setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}`); // Fallback
+        const failureMessage = `Mock Animation using image "${selectedImage.name}", with ${audioContextMessageSegment}${voiceInfoSegment}. Displaying a generic placeholder. Actual lip-synced video requires a backend. AI frame generation failed: ${frameResult.errorMessage || 'Unknown error'}`;
+        setAnimatedVideoResult(failureMessage);
+        toast({ title: "Mock Frame Generation Failed", description: frameResult.errorMessage || "Could not generate AI frame, using fallback.", variant: "destructive" });
+      }
+      console.log('[handleAnimateFace] Mock processing complete.');
 
-      toast({ title: "Face Animation Complete (Mock)", description: "Mock video result is now available." });
     } catch (error) {
       console.error("Error during face animation process:", error);
       toast({ title: "Animation Error", description: "An unexpected error occurred during face animation.", variant: "destructive" });
-      setAnimatedVideoResult(null);
-      setMockVideoPlayerImage(null);
+      setAnimatedVideoResult("An unexpected error occurred. Displaying generic placeholder.");
+      setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}`);
     } finally {
       setIsAnimatingFace(false);
       console.log('[handleAnimateFace] Completed. isAnimatingFace set to false.');
     }
-  }, [selectedImage, toast, preparedSpeechText, textForSimulatedClonedVoice, selectedVoiceSample]);
+  }, [selectedImage, imagePreview, toast, preparedSpeechText, textForSimulatedClonedVoice, selectedVoiceSample]);
 
   const currentPreparedTextIsSpeaking = isSpeaking && speakingText === preparedSpeechText && preparedSpeechText !== null;
-  const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoice !== null;
+  const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && !!textForSimulatedClonedVoice;
 
 
   return (
@@ -717,7 +727,7 @@ export default function Home() {
                     onClick={handlePlaySimulatedClonedVoice}
                     variant="outline"
                     size="sm"
-                    disabled={anyLoading || !textForSimulatedClonedVoice || isSpeaking}
+                    disabled={anyLoading || isSpeaking}
                    >
                      {currentSimulatedClonedVoiceIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Simulated Voice</> : <><Volume2 className="mr-2 h-4 w-4" />Play Simulated Cloned Voice</>}
                    </Button>
@@ -791,18 +801,18 @@ export default function Home() {
                   {isAnimatingFace ? (
                     <div className="flex flex-col items-center justify-center text-center p-4">
                       <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-                      <p className="text-lg font-semibold text-white">Generating Animation...</p>
-                      <p className="text-sm text-gray-300">Please wait, this may take a moment.</p>
+                      <p className="text-lg font-semibold text-white">Generating Mock Animation...</p>
+                      <p className="text-sm text-gray-300">Please wait, AI is creating a placeholder frame.</p>
                     </div>
                   ) : mockVideoPlayerImage ? (
                     <Image
                       key={mockVideoPlayerImage} 
                       src={mockVideoPlayerImage}
-                      alt="Mock video placeholder"
+                      alt="Mock animated frame placeholder"
                       width={640}
                       height={360}
                       className="object-contain"
-                      data-ai-hint="video placeholder"
+                      data-ai-hint="ai portrait"
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
@@ -839,7 +849,7 @@ export default function Home() {
                 )}
               </div>
                <p className="text-sm text-muted-foreground mt-4">
-                This section demonstrates the planned UI for lip-syncing an image (uploaded in the first section) with the generated audio (either standard TTS or mock cloned voice). The actual animation processing would be handled by a backend service.
+                This section demonstrates the UI for a face animation feature. The "Animate Face" button uses AI to generate a *single still image* as a dynamic placeholder. Actual lip-synced video animation requires a dedicated backend service not implemented here.
               </p>
             </div>
           </SectionCard>
@@ -851,4 +861,3 @@ export default function Home() {
     </div>
   );
 }
-

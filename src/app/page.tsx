@@ -582,25 +582,13 @@ export default function Home() {
         animationPrompt: animationCreativePrompt,
       });
 
-      const audioContextMessageSegment = `audio based on text: "${audioTextContext.substring(0,70)}..."`;
-      let voiceInfoSegment = '';
-      if (currentHasSimulatedClonedAudio && selectedVoiceSample) {
-        voiceInfoSegment = ` (simulated with custom voice from "${selectedVoiceSample.name}")`;
-      } else if (currentHasPreparedTextAudio && selectedVoiceSample) { 
-        voiceInfoSegment = ` (standard browser TTS used, voice sample "${selectedVoiceSample.name}" was noted)`;
-      } else if (currentHasPreparedTextAudio) { 
-        voiceInfoSegment = ` (standard browser TTS used)`;
-      }
-
       if (frameResult.generatedFrameDataUri) {
         setMockVideoPlayerImage(frameResult.generatedFrameDataUri);
-        const successMessage = `AI-Generated Mock Frame for animation using image "${selectedImage.name}", with ${audioContextMessageSegment}${voiceInfoSegment}. This is a *still image* placeholder. Actual lip-synced video would require a dedicated backend.`;
-        setAnimatedVideoResult(successMessage);
+        setAnimatedVideoResult(null); // Remove descriptive text
         toast({ title: "Mock Animation Frame Generated", description: "AI-generated placeholder frame is now available." });
       } else {
         setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}`); 
-        const failureMessage = `Mock Animation using image "${selectedImage.name}", with ${audioContextMessageSegment}${voiceInfoSegment}. Displaying a generic placeholder. Actual lip-synced video requires a backend. AI frame generation failed: ${frameResult.errorMessage || 'Unknown error'}`;
-        setAnimatedVideoResult(failureMessage);
+        setAnimatedVideoResult(null); // Remove descriptive text
         toast({ title: "Mock Frame Generation Failed", description: frameResult.errorMessage || "Could not generate AI frame, using fallback.", variant: "destructive" });
       }
       console.log('[handleAnimateFace] Mock processing complete.');
@@ -608,7 +596,7 @@ export default function Home() {
     } catch (error: any) {
       console.error("Error during face animation process:", error);
       toast({ title: "Animation Error", description: "An unexpected error occurred during face animation.", variant: "destructive" });
-      setAnimatedVideoResult("An unexpected error occurred. Displaying generic placeholder.");
+      setAnimatedVideoResult(null); // Remove descriptive text
       setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}`);
     } finally {
       setIsAnimatingFace(false);
@@ -683,7 +671,7 @@ export default function Home() {
                         onClick={handleSpeakPreparedText}
                         variant="outline"
                         size="sm"
-                        disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!isPreparedTextUsable() && !currentPreparedTextIsSpeaking) }
+                        disabled={anyLoading || isSimulatedClonedVoiceSpeaking }
                       >
                         {currentPreparedTextIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
                       </Button>

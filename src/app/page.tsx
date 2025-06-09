@@ -250,17 +250,18 @@ export default function Home() {
               setSpeakingText(null);
             };
             utterance.onerror = (event) => {
-              console.error("Speech synthesis error (handleTextToSpeech auto-play). Code:", event.error, "Event details:", event);
               if (event.error === 'interrupted') {
+                console.warn("Speech synthesis warning (handleTextToSpeech auto-play interrupted). Code:", event.error, "Event details:", event);
                 toast({ title: "Speech Interrupted", description: "Auto-playback was interrupted.", variant: "default" });
               } else {
+                console.error("Speech synthesis error (handleTextToSpeech auto-play). Code:", event.error, "Event details:", event);
                 toast({ title: "Speech Error", description: `Could not auto-play speech. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
               }
               setIsSpeaking(false);
               setSpeakingText(null);
             };
             window.speechSynthesis.speak(utterance);
-        }, 100); // Increased timeout
+        }, 100); 
 
         toast({
           title: "Processing Complete",
@@ -351,17 +352,18 @@ export default function Home() {
           setSpeakingText(null);
         };
         utterance.onerror = (event) => {
-          console.error("Speech synthesis error (from Speak button). Code:", event.error, "Event details:", event);
-           if (event.error === 'interrupted') {
-                toast({ title: "Speech Interrupted", description: "Playback was interrupted.", variant: "default" });
-            } else {
-                toast({ title: "Speech Error", description: `Could not play speech. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
-            }
+          if (event.error === 'interrupted') {
+            console.warn("Speech synthesis warning (from Speak button interrupted). Code:", event.error, "Event details:", event);
+            toast({ title: "Speech Interrupted", description: "Playback was interrupted.", variant: "default" });
+          } else {
+            console.error("Speech synthesis error (from Speak button). Code:", event.error, "Event details:", event);
+            toast({ title: "Speech Error", description: `Could not play speech. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
+          }
           setIsSpeaking(false);
           setSpeakingText(null);
         };
         window.speechSynthesis.speak(utterance);
-      }, 100); // Increased timeout
+      }, 100); 
     } else {
       toast({ title: "Nothing to Speak", description: "There is no suitable prepared text to speak.", variant: "default" });
     }
@@ -519,16 +521,17 @@ export default function Home() {
             setIsSimulatedClonedVoiceSpeaking(false);
         };
         utterance.onerror = (event) => {
-            console.error("[handlePlaySimulatedClonedVoice] Speech synthesis error (Simulated Cloned). Code:", event.error, "Event details:", event);
-             if (event.error === 'interrupted') {
+            if (event.error === 'interrupted') {
+                console.warn("[handlePlaySimulatedClonedVoice] Speech synthesis warning (Simulated Cloned interrupted). Code:", event.error, "Event details:", event);
                 toast({ title: "Speech Interrupted", description: "Simulated cloned voice playback was interrupted.", variant: "default" });
             } else {
+                console.error("[handlePlaySimulatedClonedVoice] Speech synthesis error (Simulated Cloned). Code:", event.error, "Event details:", event);
                 toast({ title: "Speech Error", description: `Could not play simulated cloned voice. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
             }
             setIsSimulatedClonedVoiceSpeaking(false);
         };
         window.speechSynthesis.speak(utterance);
-    }, 100); // Increased timeout
+    }, 100); 
 
   }, [isSpeechSupported, toast]);
 

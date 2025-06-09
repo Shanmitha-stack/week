@@ -136,6 +136,13 @@ export default function Home() {
     resetAllOutputsDependentOnTextOrImage();
   };
 
+  const isPreparedTextUsable = () => {
+    const currentPreparedText = preparedSpeechTextRef.current; 
+    return currentPreparedText &&
+           currentPreparedText.trim() !== "" &&
+           !currentPreparedText.toLowerCase().startsWith("no text was provided") &&
+           !currentPreparedText.toLowerCase().startsWith("error:");
+  };
 
   const handleTextToSpeech = async () => {
     if (!textInput.trim() && !selectedImage) {
@@ -193,7 +200,7 @@ export default function Home() {
             const utterance = new SpeechSynthesisUtterance(preparedText);
             utterance.onstart = () => {
               console.log('[handleTextToSpeech auto-play] Utterance started.');
-              setIsSpeaking(true); // Ensure flags are correct on start
+              setIsSpeaking(true); 
               setIsSimulatedClonedVoiceSpeaking(false);
               setSpeakingText(preparedText);
             };
@@ -244,13 +251,6 @@ export default function Home() {
     }
   };
   
-  const isPreparedTextUsable = () => {
-    const currentPreparedText = preparedSpeechTextRef.current; 
-    return currentPreparedText &&
-           currentPreparedText.trim() !== "" &&
-           !currentPreparedText.toLowerCase().startsWith("no text was provided") &&
-           !currentPreparedText.toLowerCase().startsWith("error:");
-  };
 
   const handleSpeakPreparedText = useCallback(() => {
     if (!isSpeechSupported) {
@@ -265,7 +265,7 @@ export default function Home() {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
       setSpeakingText(null);
-      setIsSimulatedClonedVoiceSpeaking(false); // Ensure other is off
+      setIsSimulatedClonedVoiceSpeaking(false); 
       return;
     }
     
@@ -293,7 +293,7 @@ export default function Home() {
         const utterance = new SpeechSynthesisUtterance(textToSpeak);
         utterance.onstart = () => {
           console.log('[handleSpeakPreparedText] Utterance started.');
-          setIsSpeaking(true); // Ensure flags are correct on start
+          setIsSpeaking(true); 
           setIsSimulatedClonedVoiceSpeaking(false);
           setSpeakingText(textToSpeak);
         };
@@ -428,7 +428,7 @@ export default function Home() {
         console.log('[handlePlaySimulatedClonedVoice] Attempting to STOP simulated cloned voice because it is currently speaking.');
         window.speechSynthesis.cancel();
         setIsSimulatedClonedVoiceSpeaking(false);
-        setIsSpeaking(false); // Ensure other is off
+        setIsSpeaking(false); 
         setSpeakingText(null);
         return;
     }
@@ -446,7 +446,7 @@ export default function Home() {
     setTimeout(() => {
         if (!isSimulatedClonedVoiceSpeakingRef.current) { 
             console.log('[handlePlaySimulatedClonedVoice] setTimeout: Play request for simulated cloned voice was cancelled before execution. Current isSimulatedClonedVoiceSpeakingRef:', isSimulatedClonedVoiceSpeakingRef.current);
-            if (isSimulatedClonedVoiceSpeakingRef.current) { // Should be redundant but safe
+             if (isSimulatedClonedVoiceSpeakingRef.current) { 
                  setIsSimulatedClonedVoiceSpeaking(false);
             }
             return;
@@ -461,9 +461,9 @@ export default function Home() {
         const utterance = new SpeechSynthesisUtterance(currentTextForSimulated);
         utterance.onstart = () => {
             console.log('[handlePlaySimulatedClonedVoice] Utterance started.');
-            setIsSimulatedClonedVoiceSpeaking(true); // Ensure flags are correct
+            setIsSimulatedClonedVoiceSpeaking(true); 
             setIsSpeaking(false);
-            setSpeakingText(null); // Not this type of speaking
+            setSpeakingText(null); 
         };
         utterance.onend = () => {
             console.log('[handlePlaySimulatedClonedVoice] Utterance ended.');
@@ -484,8 +484,9 @@ export default function Home() {
 
   }, [isSpeechSupported, toast]);
 
+  const anyLoading = isGeneratingSpeech || isCloningVoice || isAnimatingFace;
 
-  const handleAnimateFace = async () => {
+  const handleAnimateFace = useCallback(async () => {
     console.log('[handleAnimateFace] Initiated.');
     if (!selectedImage) { 
       toast({ title: "Image Required for Animation", description: "Please upload an image in the 'Text & Image to Speech Preparation' section. That image will be used for animation.", variant: "destructive" });
@@ -505,7 +506,7 @@ export default function Home() {
 
 
     if (!audioSourceText) {
-       toast({ title: "Audio Source Required", description: `Please process text for speech or perform mock voice cloning first. The animation needs an audio context.`, variant: "destructive" });
+       toast({ title: "Audio Source Required", description: "Audio source required. Please use 'Process Input for Speech' or 'Generate Speech with Cloned Voice (Mock)' first, then try animating.", variant: "destructive" });
        console.log('[handleAnimateFace] Aborted: No audio source text available (neither prepared text nor simulated cloned audio).');
       return;
     }
@@ -561,9 +562,8 @@ export default function Home() {
       setIsAnimatingFace(false);
       console.log('[handleAnimateFace] Completed. isAnimatingFace set to false.');
     }
-  };
+  }, [selectedImage, imagePreview, isSpeechSupported, toast, anyLoading, isPreparedTextUsable, handleSpeakPreparedText, handlePlaySimulatedClonedVoice, selectedVoiceSample]);
 
-  const anyLoading = isGeneratingSpeech || isCloningVoice || isAnimatingFace;
   const currentPreparedTextIsSpeaking = isSpeaking && speakingText === preparedSpeechText && preparedSpeechText !== null;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoice !== null;
 
@@ -728,7 +728,7 @@ export default function Home() {
 
               <Button
                 onClick={handleAnimateFace}
-                disabled={anyLoading || !selectedImage || (!isPreparedTextUsable() && !textForSimulatedClonedVoice)}
+                disabled={anyLoading || !selectedImage || (!isPreparedTextUsable() && !textForSimulatedClonedVoiceRef.current)}
                 className="w-full sm:w-auto"
               >
                 {isAnimatingFace ? (
@@ -810,3 +810,7 @@ export default function Home() {
     </div>
   );
 }
+
+
+    
+

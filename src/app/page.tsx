@@ -452,7 +452,7 @@ export default function Home() {
             return;
         }
         if (textForSimulatedClonedVoiceRef.current !== currentTextForSimulated) {
-            console.log('[handlePlaySimulatedClonedVoice] setTimeout: Text for simulated voice changed before execution. Aborting. Expected:', currentTextForSimulated, 'Got:', textForSimulatedClonedVoiceRef.current);
+            console.warn('[handlePlaySimulatedClonedVoice] setTimeout: Text for simulated voice changed before execution. Aborting. Expected:', currentTextForSimulated, 'Got:', textForSimulatedClonedVoiceRef.current);
             setIsSimulatedClonedVoiceSpeaking(false);
             return;
         }
@@ -486,11 +486,14 @@ export default function Home() {
 
   const anyLoading = isGeneratingSpeech || isCloningVoice || isAnimatingFace;
 
-  const hasPreparedTextAudio = preparedSpeechText &&
-                             preparedSpeechText.trim() !== "" &&
-                             !preparedSpeechText.toLowerCase().startsWith("no text was provided") &&
-                             !preparedSpeechText.toLowerCase().startsWith("error:");
+  const hasPreparedTextAudio =
+    preparedSpeechText &&
+    preparedSpeechText.trim() !== "" &&
+    !preparedSpeechText.toLowerCase().startsWith("no text was provided") &&
+    !preparedSpeechText.toLowerCase().startsWith("error:");
+
   const hasSimulatedClonedAudio = !!textForSimulatedClonedVoice;
+
   const isAudioAvailableForAnimation = hasPreparedTextAudio || hasSimulatedClonedAudio;
 
 
@@ -502,7 +505,7 @@ export default function Home() {
       return;
     }
     
-    const audioSourceForAnimation = textForSimulatedClonedVoice // Use direct state
+    const audioSourceForAnimation = textForSimulatedClonedVoice
       ? "simulated cloned audio"
       : (hasPreparedTextAudio ? "prepared speech text" : null);
 
@@ -569,7 +572,7 @@ export default function Home() {
       setIsAnimatingFace(false);
       console.log('[handleAnimateFace] Completed. isAnimatingFace set to false.');
     }
-  }, [selectedImage, imagePreview, toast, preparedSpeechText, textForSimulatedClonedVoice, selectedVoiceSample, hasPreparedTextAudio]);
+  }, [selectedImage, imagePreview, toast, preparedSpeechText, textForSimulatedClonedVoice, selectedVoiceSample, hasPreparedTextAudio, anyLoading]);
 
   const currentPreparedTextIsSpeaking = isSpeaking && speakingText === preparedSpeechText && preparedSpeechText !== null;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoice !== null;
@@ -786,7 +789,7 @@ export default function Home() {
                          onClick={handleSpeakPreparedText}
                          variant="outline"
                          size="sm"
-                         disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!currentPreparedTextIsSpeaking && !hasPreparedTextAudio) }
+                         disabled={anyLoading || isSimulatedClonedVoiceSpeaking}
                         >
                         {currentPreparedTextIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Animation Audio (TTS)</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (TTS)</>}
                       </Button>
@@ -817,3 +820,4 @@ export default function Home() {
     </div>
   );
 }
+

@@ -277,8 +277,6 @@ export default function Home() {
       if (clonedAudioUrl && selectedVoiceSample) {
         voiceInfo = ` with custom cloned voice from "${selectedVoiceSample.name}"`;
       } else if (isPreparedTextUsable && selectedVoiceSample) {
-        // If clonedAudioUrl is not set but a voice sample exists, it means mock cloning wasn't run or didn't "succeed" for this animation path.
-        // We imply standard TTS would be used, but mention the sample for context if backend *were* to use it.
         voiceInfo = ` (standard browser TTS used, voice sample "${selectedVoiceSample.name}" available for context if backend supported it)`;
       } else if (isPreparedTextUsable) {
         voiceInfo = ` (standard browser TTS used)`;
@@ -364,14 +362,14 @@ export default function Home() {
                 <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">
                   <div className="flex justify-between items-center mb-2">
                     <Label className="text-lg font-semibold text-foreground">Prepared Text for Speech:</Label>
-                    {isSpeechSupported && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("error:") && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && (
+                    {isSpeechSupported && isPreparedTextUsable && (
                       <Button onClick={handleSpeakPreparedText} variant="outline" size="sm" disabled={anyLoading || isSpeaking}>
                         {isSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
                       </Button>
                     )}
                   </div>
                   <p className="text-base whitespace-pre-wrap text-foreground/90">{preparedSpeechText}</p>
-                   {!isSpeechSupported && preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("error:") && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && (
+                   {!isSpeechSupported && isPreparedTextUsable && (
                     <p className="mt-3 text-sm text-muted-foreground italic">
                       Your browser does not support speech synthesis. 
                     </p>
@@ -496,7 +494,19 @@ export default function Home() {
                   )}
                 </div>
                 {!isAnimatingFace && animatedVideoResult && (
-                  <p className="text-sm whitespace-pre-wrap text-foreground/80 mt-3 bg-background/50 p-3 rounded-md shadow-sm">{animatedVideoResult}</p>
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm whitespace-pre-wrap text-foreground/80 bg-background/50 p-3 rounded-md shadow-sm">{animatedVideoResult}</p>
+                    {!clonedAudioUrl && isPreparedTextUsable && isSpeechSupported && (
+                       <Button onClick={handleSpeakPreparedText} variant="outline" size="sm" disabled={anyLoading || isSpeaking}>
+                        {isSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking Animation Audio</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (TTS)</>}
+                      </Button>
+                    )}
+                    {clonedAudioUrl && (
+                      <p className="text-sm text-muted-foreground italic">
+                        This animation would use the (mock) cloned audio. Please use the player in the 'Voice Cloning & Synthesis' section to attempt playback.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
                <p className="text-sm text-muted-foreground mt-4">

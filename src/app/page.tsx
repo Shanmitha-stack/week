@@ -39,8 +39,11 @@ export default function Home() {
       setIsSpeechSupported(true);
     }
     return () => {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
+      // Ensure speech synthesis is available and in a state where cancel is meaningful
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
+        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+          window.speechSynthesis.cancel();
+        }
       }
     };
   }, []);
@@ -357,8 +360,7 @@ export default function Home() {
                 </div>
               )}
                <p className="text-sm text-muted-foreground mt-4">
-                This section demonstrates the planned UI for lip-syncing a static face image with the generated audio.
-                The actual animation processing (e.g., using Wav2Lip/SadTalker) would be handled by a backend service, which is not implemented here.
+                This section demonstrates the planned UI for lip-syncing a static face image with the generated audio. The actual animation processing (e.g., using Wav2Lip/SadTalker) would be handled by a backend service, which is not implemented here.
               </p>
             </div>
           </SectionCard>

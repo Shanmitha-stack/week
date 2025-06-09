@@ -5,12 +5,13 @@ import React, { useState, ChangeEvent, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import AppHeader from '@/components/AppHeader';
 import SectionCard from '@/components/SectionCard';
+import AudioPlayer from '@/components/AudioPlayer';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, Mic, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff } from 'lucide-react';
+import { Text, Mic, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff, MicVocal } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 
 export default function Home() {
@@ -22,7 +23,9 @@ export default function Home() {
   const [preparedSpeechText, setPreparedSpeechText] = useState<string | null>(null);
 
   const [selectedVoiceSample, setSelectedVoiceSample] = useState<File | null>(null);
-  const [isUploadingSample, setIsUploadingSample] = useState<boolean>(false);
+  const [isCloningVoice, setIsCloningVoice] = useState<boolean>(false);
+  const [clonedAudioUrl, setClonedAudioUrl] = useState<string | null>(null);
+
 
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
@@ -64,6 +67,7 @@ export default function Home() {
     }
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
+    setClonedAudioUrl(null);
   };
 
   const toDataURL = (file: File): Promise<string> =>
@@ -89,6 +93,8 @@ export default function Home() {
     setPreparedSpeechText(null); 
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
+    setClonedAudioUrl(null);
+
 
     let imageDataUri: string | undefined = undefined;
     if (selectedImage) {
@@ -135,7 +141,7 @@ export default function Home() {
           duration: 6000,
         });
       } else {
-        toast({
+         toast({
           title: "Input Processed",
           description: preparedText || "An issue occurred while preparing text.", 
           duration: 6000,
@@ -182,18 +188,41 @@ export default function Home() {
     else setSelectedVoiceSample(null);
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
+    setClonedAudioUrl(null);
   };
+  
+  const isPreparedTextUsable = preparedSpeechText && 
+                               preparedSpeechText.trim() !== "" && 
+                               !preparedSpeechText.toLowerCase().startsWith("no text was provided") && 
+                               !preparedSpeechText.toLowerCase().startsWith("error:");
 
-  const handleUploadVoiceSample = async () => {
+  const handleCloneVoiceAndSynthesize = async () => {
     if (!selectedVoiceSample) {
-      toast({ title: "Voice Sample Required", description: "Please select a voice sample to upload.", variant: "destructive" });
+      toast({ title: "Voice Sample Required", description: "Please select a voice sample.", variant: "destructive" });
       return;
     }
-    setIsUploadingSample(true);
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Mock upload
-    setIsUploadingSample(false);
-    toast({ title: "Sample Uploaded (Mock)", description: "Voice sample upload would be handled here. Voice cloning is not yet implemented." });
+    if (!isPreparedTextUsable) {
+      toast({ title: "Prepared Speech Text Required", description: "Please process some text for speech first. Voice cloning needs text to synthesize.", variant: "destructive" });
+      return;
+    }
+
+    setIsCloningVoice(true);
+    setClonedAudioUrl(null);
+    setAnimatedVideoResult(null); 
+    setMockVideoPlayerImage(null);
+
+    toast({ title: "Mock Voice Cloning", description: "Initializing voice cloning process..." });
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    toast({ title: "Mock Voice Cloning", description: "Processing voice sample..." });
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    toast({ title: "Mock Voice Cloning", description: "Synthesizing speech with cloned voice..." });
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    setClonedAudioUrl("mock-cloned-audio.wav"); // Placeholder for AudioPlayer src
+    setIsCloningVoice(false);
+    toast({ title: "Mock Voice Cloning Complete", description: `Speech based on "${preparedSpeechText!.substring(0,50)}..." using voice sample "${selectedVoiceSample.name}" is (mock) ready.` });
   };
+
 
   const handleStaticFaceImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -217,14 +246,13 @@ export default function Home() {
       toast({ title: "Static Face Image Required", description: "Please upload a static face image.", variant: "destructive" });
       return;
     }
-    const isPreparedTextUsable = preparedSpeechText && 
-                                preparedSpeechText.trim() !== "" && 
-                                !preparedSpeechText.toLowerCase().startsWith("no text was provided") && 
-                                !preparedSpeechText.toLowerCase().startsWith("error:");
-    if (!isPreparedTextUsable) {
-      toast({ title: "Prepared Speech Text Required", description: "Please process some text for speech first. The animation needs audio context.", variant: "destructive" });
+    
+    const audioSourceText = clonedAudioUrl ? "cloned audio" : "prepared speech text";
+    if (!isPreparedTextUsable && !clonedAudioUrl) {
+       toast({ title: "Audio Source Required", description: `Please process text for speech or perform mock voice cloning first. The animation needs an audio context.`, variant: "destructive" });
       return;
     }
+
 
     setIsAnimatingFace(true);
     setAnimatedVideoResult(null);
@@ -233,16 +261,22 @@ export default function Home() {
     toast({ title: "Starting Animation Process", description: "Preprocessing face image..." });
     await new Promise(resolve => setTimeout(resolve, 1500)); 
 
-    toast({ title: "Processing Animation", description: "Generating lip-sync video with prepared audio..." });
+    toast({ title: "Processing Animation", description: `Generating lip-sync video with ${audioSourceText}...` });
     await new Promise(resolve => setTimeout(resolve, 2500)); 
 
-    const preparedTextSnippet = preparedSpeechText!.substring(0, 70) + (preparedSpeechText!.length > 70 ? '...' : '');
-    let voiceSampleInfo = '';
-    if (selectedVoiceSample) {
-      voiceSampleInfo = ` with custom voice from "${selectedVoiceSample.name}"`;
+    const preparedTextSnippet = preparedSpeechText ? preparedSpeechText.substring(0, 70) + (preparedSpeechText.length > 70 ? '...' : '') : "N/A";
+    let voiceInfo = '';
+    if (clonedAudioUrl && selectedVoiceSample) {
+      voiceInfo = ` with custom cloned voice from "${selectedVoiceSample.name}"`;
+    } else if (selectedVoiceSample) {
+      voiceInfo = ` (voice sample "${selectedVoiceSample.name}" provided, standard TTS used unless cloned audio was generated)`;
+    } else {
+      voiceInfo = ` (standard browser TTS used)`;
     }
+    
+    const audioContextForMessage = clonedAudioUrl ? `using mock cloned audio` : `using prepared speech: "${preparedTextSnippet}"`;
 
-    const mockVideoOutputMessage = `Animation using face image "${staticFaceImage.name}", prepared speech: "${preparedTextSnippet}"${voiceSampleInfo}. The animated video would be displayed here. (Mock Output)`;
+    const mockVideoOutputMessage = `Animation using face image "${staticFaceImage.name}", ${audioContextForMessage}${voiceInfo}. The animated video would be displayed here. (Mock Output)`;
     setAnimatedVideoResult(mockVideoOutputMessage);
     setMockVideoPlayerImage("https://placehold.co/640x360.png");
 
@@ -251,11 +285,8 @@ export default function Home() {
     toast({ title: "Face Animation Complete (Mock)", description: "Mock video result is now available." });
   };
 
-  const canAnimateFace = staticFaceImage && 
-                         preparedSpeechText && 
-                         preparedSpeechText.trim() !== "" && 
-                         !preparedSpeechText.toLowerCase().startsWith("no text was provided") && 
-                         !preparedSpeechText.toLowerCase().startsWith("error:");
+  const canAnimateFace = staticFaceImage && (isPreparedTextUsable || clonedAudioUrl);
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -275,6 +306,7 @@ export default function Home() {
                     setPreparedSpeechText(null);
                     setAnimatedVideoResult(null);
                     setMockVideoPlayerImage(null);
+                    setClonedAudioUrl(null);
                   }}
                   placeholder="Type or paste your text here..."
                   rows={4}
@@ -318,7 +350,7 @@ export default function Home() {
                   <div className="flex justify-between items-center mb-2">
                     <Label className="text-lg font-semibold text-foreground">Prepared Text for Speech:</Label>
                     {isSpeechSupported && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("error:") && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && (
-                      <Button onClick={handleSpeakPreparedText} variant="outline" size="sm" disabled={isGeneratingSpeech}>
+                      <Button onClick={handleSpeakPreparedText} variant="outline" size="sm" disabled={isGeneratingSpeech || isCloningVoice}>
                         {isSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
                       </Button>
                     )}
@@ -326,13 +358,57 @@ export default function Home() {
                   <p className="text-base whitespace-pre-wrap text-foreground/90">{preparedSpeechText}</p>
                    {!isSpeechSupported && preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("error:") && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && (
                     <p className="mt-3 text-sm text-muted-foreground italic">
-                      Your browser does not support speech synthesis. You can use the 'Speak' button if it becomes available.
+                      Your browser does not support speech synthesis. 
                     </p>
                   )}
                 </div>
               )}
             </div>
           </SectionCard>
+
+          <SectionCard title="Voice Cloning & Synthesis (Mock)" icon={<MicVocal className="text-primary" />}>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="voice-sample-input" className="text-base">Upload a voice sample (e.g., .wav, .mp3):</Label>
+                <Input
+                  id="voice-sample-input"
+                  type="file"
+                  accept="audio/*"
+                  onChange={handleVoiceSampleChange}
+                  className="text-base mt-1 file:text-primary file:font-medium"
+                />
+                {selectedVoiceSample && (
+                  <p className="text-sm text-muted-foreground mt-1">Selected file: {selectedVoiceSample.name}</p>
+                )}
+              </div>
+              <Button 
+                onClick={handleCloneVoiceAndSynthesize} 
+                disabled={isCloningVoice || !selectedVoiceSample || !isPreparedTextUsable || isGeneratingSpeech} 
+                className="w-full sm:w-auto"
+              >
+                {isCloningVoice ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Cloning Voice...</>
+                ) : (
+                  <><MicVocal className="mr-2 h-4 w-4" />Generate Speech with Cloned Voice (Mock)</>
+                )}
+              </Button>
+              {clonedAudioUrl && (
+                <div className="mt-4 space-y-2">
+                   <Label className="text-base font-semibold text-foreground">Mock Cloned Audio Output:</Label>
+                  <AudioPlayer src={clonedAudioUrl} />
+                   <p className="text-sm text-muted-foreground">
+                    This audio player is for demonstration. The audio source is a mock placeholder.
+                    Actual voice cloning would generate a unique audio file here.
+                  </p>
+                </div>
+              )}
+              <p className="text-sm text-muted-foreground pt-2">
+                This section demonstrates the UI for voice cloning. Upload a voice sample and ensure text is prepared in the section above. 
+                The "Generate Speech" button simulates a backend voice cloning process and displays a placeholder audio player. Actual voice cloning is not implemented.
+              </p>
+            </div>
+          </SectionCard>
+
 
           <SectionCard title="Week 2: Face Preprocessing + Lip Sync Video (Audio + Image → Talking Face)" icon={<Smile className="text-primary" />} >
             <div className="space-y-4">
@@ -361,7 +437,7 @@ export default function Home() {
 
               <Button 
                 onClick={handleAnimateFace} 
-                disabled={isAnimatingFace || !canAnimateFace} 
+                disabled={isAnimatingFace || !canAnimateFace || isGeneratingSpeech || isCloningVoice} 
                 className="w-full sm:w-auto"
               >
                 {isAnimatingFace ? (
@@ -370,7 +446,7 @@ export default function Home() {
                     Animating Face...
                   </>
                 ) : (
-                  "Animate Face with Prepared Speech"
+                  "Animate Face with Audio"
                 )}
               </Button>
 
@@ -399,7 +475,7 @@ export default function Home() {
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
                       <VideoOff className="h-12 w-12 mb-4" />
                       <p className="text-lg font-semibold">Animation will appear here</p>
-                      <p className="text-sm">Upload a face image and process text for speech, then click "Animate Face".</p>
+                      <p className="text-sm">Upload a face image and ensure audio (prepared speech or mock cloned) is available, then click "Animate Face".</p>
                     </div>
                   )}
                 </div>
@@ -408,26 +484,33 @@ export default function Home() {
                 )}
               </div>
                <p className="text-sm text-muted-foreground mt-4">
-                This section demonstrates the planned UI for lip-syncing a static face image with the generated audio. The actual animation processing (e.g., using Wav2Lip/SadTalker) would be handled by a backend service, which is not implemented here.
+                This section demonstrates the planned UI for lip-syncing a static face image with the generated audio (either standard TTS or mock cloned voice). The actual animation processing would be handled by a backend service.
               </p>
             </div>
           </SectionCard>
 
+          {/* Original Upload Voice Sample section (now effectively replaced/enhanced by Voice Cloning section) can be removed or kept if it serves a different purpose, e.g. just uploading without cloning. 
+              For now, I'm commenting it out as its functionality is incorporated into the new "Voice Cloning & Synthesis (Mock)" section.
+          
           <SectionCard title="Upload Voice Sample (for future use)" icon={<Mic className="text-primary" />} >
             <div className="space-y-4">
-              <Label htmlFor="voice-sample-input" className="text-base">Upload a voice sample (e.g., .wav, .mp3):</Label>
+              <Label htmlFor="voice-sample-input-original" className="text-base">Upload a voice sample (e.g., .wav, .mp3):</Label>
               <Input
-                id="voice-sample-input"
+                id="voice-sample-input-original"
                 type="file"
                 accept="audio/*"
-                onChange={handleVoiceSampleChange}
+                // onChange={handleVoiceSampleChange} // This would need a different handler if kept separate
                 className="text-base file:text-primary file:font-medium"
               />
-              {selectedVoiceSample && (
+              {selectedVoiceSample && ( // This state would also need to be considered if keeping this section separate
                 <p className="text-sm text-muted-foreground">Selected file: {selectedVoiceSample.name}</p>
               )}
-              <Button onClick={handleUploadVoiceSample} disabled={isUploadingSample || !selectedVoiceSample} className="w-full sm:w-auto">
-                {isUploadingSample ? (
+              <Button 
+                // onClick={handleUploadVoiceSample} // This would need a different handler
+                // disabled={isUploadingSample || !selectedVoiceSample} 
+                className="w-full sm:w-auto"
+              >
+                {isUploadingSample ? ( // This state would need to be managed separately
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading...</>
                 ) : (
                   <><UploadCloud className="mr-2 h-4 w-4" />Upload Sample</>
@@ -438,6 +521,8 @@ export default function Home() {
               </p>
             </div>
           </SectionCard>
+          */}
+
         </div>
       </main>
       <footer className="py-6 text-center text-muted-foreground border-t">
@@ -446,4 +531,3 @@ export default function Home() {
     </div>
   );
 }
-

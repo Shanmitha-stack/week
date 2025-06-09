@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, Mic, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle, Smile, Video } from 'lucide-react';
+import { Text, Mic, Loader2, UploadCloud, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 
 export default function Home() {
@@ -62,7 +62,6 @@ export default function Home() {
       setSelectedImage(null);
       setImagePreview(null);
     }
-    // If base image changes, invalidate animation output
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
   };
@@ -106,7 +105,6 @@ export default function Home() {
     try {
       const { preparedText } = await prepareTextForSpeech({ text: textInput, imageDataUri });
       setPreparedSpeechText(preparedText);
-      // New prepared text invalidates old animation
       setAnimatedVideoResult(null);
       setMockVideoPlayerImage(null);
       
@@ -182,7 +180,6 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (file) setSelectedVoiceSample(file);
     else setSelectedVoiceSample(null);
-     // If voice sample changes, invalidate animation output
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
   };
@@ -211,7 +208,6 @@ export default function Home() {
       setStaticFaceImage(null);
       setStaticFaceImagePreview(null);
     }
-    // If static face image changes, invalidate animation output
     setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
   };
@@ -276,7 +272,6 @@ export default function Home() {
                   value={textInput}
                   onChange={(e) => {
                     setTextInput(e.target.value);
-                    // If text input changes, this might invalidate prepared speech and thus animation
                     setPreparedSpeechText(null);
                     setAnimatedVideoResult(null);
                     setMockVideoPlayerImage(null);
@@ -379,34 +374,39 @@ export default function Home() {
                 )}
               </Button>
 
-              {isAnimatingFace && (
-                 <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow flex flex-col items-center justify-center">
-                    <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-                    <p className="text-lg font-semibold text-foreground">Processing Animation...</p>
-                 </div>
-              )}
-
-              {!isAnimatingFace && mockVideoPlayerImage && (
-                <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">
-                  <Label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-2">
-                    <Video className="h-5 w-5"/>
-                    Mock Animation Output:
-                  </Label>
-                  <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden">
-                     <Image
-                        src={mockVideoPlayerImage}
-                        alt="Mock video placeholder"
-                        width={640}
-                        height={360}
-                        className="object-contain"
-                        data-ai-hint="video placeholder"
-                      />
-                  </div>
-                  {animatedVideoResult && (
-                    <p className="text-sm whitespace-pre-wrap text-foreground/80 mt-3 bg-background/50 p-2 rounded-md">{animatedVideoResult}</p>
+              <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">
+                <Label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-2">
+                  <Video className="h-5 w-5"/>
+                  Mock Animation Output:
+                </Label>
+                <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden min-h-[200px]">
+                  {isAnimatingFace ? (
+                    <div className="flex flex-col items-center justify-center text-center p-4">
+                      <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+                      <p className="text-lg font-semibold text-white">Generating Animation...</p>
+                      <p className="text-sm text-gray-300">Please wait, this may take a moment.</p>
+                    </div>
+                  ) : mockVideoPlayerImage ? (
+                    <Image
+                      src={mockVideoPlayerImage}
+                      alt="Mock video placeholder"
+                      width={640}
+                      height={360}
+                      className="object-contain"
+                      data-ai-hint="video placeholder"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
+                      <VideoOff className="h-12 w-12 mb-4" />
+                      <p className="text-lg font-semibold">Animation will appear here</p>
+                      <p className="text-sm">Upload a face image and process text for speech, then click "Animate Face".</p>
+                    </div>
                   )}
                 </div>
-              )}
+                {!isAnimatingFace && animatedVideoResult && (
+                  <p className="text-sm whitespace-pre-wrap text-foreground/80 mt-3 bg-background/50 p-3 rounded-md shadow-sm">{animatedVideoResult}</p>
+                )}
+              </div>
                <p className="text-sm text-muted-foreground mt-4">
                 This section demonstrates the planned UI for lip-syncing a static face image with the generated audio. The actual animation processing (e.g., using Wav2Lip/SadTalker) would be handled by a backend service, which is not implemented here.
               </p>

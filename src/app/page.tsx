@@ -193,6 +193,9 @@ export default function Home() {
             const utterance = new SpeechSynthesisUtterance(preparedText);
             utterance.onstart = () => {
               console.log('[handleTextToSpeech auto-play] Utterance started.');
+              setIsSpeaking(true); // Ensure flags are correct on start
+              setIsSimulatedClonedVoiceSpeaking(false);
+              setSpeakingText(preparedText);
             };
             utterance.onend = () => {
               console.log('[handleTextToSpeech auto-play] Utterance ended.');
@@ -241,7 +244,6 @@ export default function Home() {
     }
   };
   
-  // Regular function, not useCallback, to ensure it always uses the latest ref value.
   const isPreparedTextUsable = () => {
     const currentPreparedText = preparedSpeechTextRef.current; 
     return currentPreparedText &&
@@ -263,22 +265,23 @@ export default function Home() {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
       setSpeakingText(null);
+      setIsSimulatedClonedVoiceSpeaking(false); // Ensure other is off
       return;
     }
     
-    if (textToSpeak && isPreparedTextUsable()) { // isPreparedTextUsable will now be fresh
+    if (textToSpeak && isPreparedTextUsable()) { 
       console.log('[handleSpeakPreparedText] Attempting to PLAY standard TTS with text:', textToSpeak);
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
         console.log('[handleSpeakPreparedText] Cancelling other/pending browser speech before playing new standard TTS.');
         window.speechSynthesis.cancel();
       }
       
-      setIsSpeaking(true); // Set intent immediately
+      setIsSpeaking(true); 
       setSpeakingText(textToSpeak); 
-      setIsSimulatedClonedVoiceSpeaking(false); // Ensure other speech is marked off
+      setIsSimulatedClonedVoiceSpeaking(false); 
 
       setTimeout(() => {
-        if (!isSpeakingRef.current || speakingTextRef.current !== textToSpeak) { // Check ref before speaking
+        if (!isSpeakingRef.current || speakingTextRef.current !== textToSpeak) { 
           console.log('[handleSpeakPreparedText] Speak request was cancelled or text changed before execution. Current isSpeakingRef:', isSpeakingRef.current, 'Current speakingTextRef:', speakingTextRef.current, 'Target textToSpeak:', textToSpeak);
            if (isSpeakingRef.current && speakingTextRef.current !== textToSpeak) { 
               setIsSpeaking(false); 
@@ -290,6 +293,9 @@ export default function Home() {
         const utterance = new SpeechSynthesisUtterance(textToSpeak);
         utterance.onstart = () => {
           console.log('[handleSpeakPreparedText] Utterance started.');
+          setIsSpeaking(true); // Ensure flags are correct on start
+          setIsSimulatedClonedVoiceSpeaking(false);
+          setSpeakingText(textToSpeak);
         };
         utterance.onend = () => {
           console.log('[handleSpeakPreparedText] Utterance ended.');
@@ -312,7 +318,7 @@ export default function Home() {
     } else {
       toast({ title: "Nothing to Speak", description: "There is no suitable prepared text to speak.", variant: "default" });
     }
-  }, [isSpeechSupported, toast]); // isPreparedTextUsable is stable as it's defined outside useCallback
+  }, [isSpeechSupported, toast]); 
 
 
   const handleVoiceSampleChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -339,7 +345,7 @@ export default function Home() {
 
     console.log('[handleCloneVoiceAndSynthesize] Initiated.');
     console.log('[handleCloneVoiceAndSynthesize] Selected voice sample:', selectedVoiceSample?.name);
-    const currentPreparedTextIsUsableAtStart = isPreparedTextUsable(); // Uses fresh check
+    const currentPreparedTextIsUsableAtStart = isPreparedTextUsable(); 
     console.log('[handleCloneVoiceAndSynthesize] Is prepared text usable at start:', currentPreparedTextIsUsableAtStart);
     const currentPreparedSpeechTextValue = preparedSpeechTextRef.current; 
     console.log('[handleCloneVoiceAndSynthesize] Current preparedSpeechText at start (from ref):', currentPreparedSpeechTextValue);
@@ -378,7 +384,6 @@ export default function Home() {
       
       await new Promise(resolve => setTimeout(resolve, 2000)); 
 
-      // Use the value captured at the start for consistency
       if (currentPreparedSpeechTextValue && 
           currentPreparedSpeechTextValue.trim() !== "" &&
           !currentPreparedSpeechTextValue.toLowerCase().startsWith("no text was provided") &&
@@ -423,7 +428,8 @@ export default function Home() {
         console.log('[handlePlaySimulatedClonedVoice] Attempting to STOP simulated cloned voice because it is currently speaking.');
         window.speechSynthesis.cancel();
         setIsSimulatedClonedVoiceSpeaking(false);
-        // No need to set text to null here, it should persist
+        setIsSpeaking(false); // Ensure other is off
+        setSpeakingText(null);
         return;
     }
 
@@ -433,16 +439,18 @@ export default function Home() {
         window.speechSynthesis.cancel();
     }
     
-    setIsSimulatedClonedVoiceSpeaking(true); // Set intent immediately
+    setIsSimulatedClonedVoiceSpeaking(true); 
     setIsSpeaking(false); 
     setSpeakingText(null); 
 
     setTimeout(() => {
-        if (!isSimulatedClonedVoiceSpeakingRef.current) { // Check ref before speaking
+        if (!isSimulatedClonedVoiceSpeakingRef.current) { 
             console.log('[handlePlaySimulatedClonedVoice] setTimeout: Play request for simulated cloned voice was cancelled before execution. Current isSimulatedClonedVoiceSpeakingRef:', isSimulatedClonedVoiceSpeakingRef.current);
+            if (isSimulatedClonedVoiceSpeakingRef.current) { // Should be redundant but safe
+                 setIsSimulatedClonedVoiceSpeaking(false);
+            }
             return;
         }
-        // Also check if the text itself has changed (e.g., due to another action invalidating it)
         if (textForSimulatedClonedVoiceRef.current !== currentTextForSimulated) {
             console.log('[handlePlaySimulatedClonedVoice] setTimeout: Text for simulated voice changed before execution. Aborting. Expected:', currentTextForSimulated, 'Got:', textForSimulatedClonedVoiceRef.current);
             setIsSimulatedClonedVoiceSpeaking(false);
@@ -453,6 +461,9 @@ export default function Home() {
         const utterance = new SpeechSynthesisUtterance(currentTextForSimulated);
         utterance.onstart = () => {
             console.log('[handlePlaySimulatedClonedVoice] Utterance started.');
+            setIsSimulatedClonedVoiceSpeaking(true); // Ensure flags are correct
+            setIsSpeaking(false);
+            setSpeakingText(null); // Not this type of speaking
         };
         utterance.onend = () => {
             console.log('[handlePlaySimulatedClonedVoice] Utterance ended.');
@@ -483,7 +494,7 @@ export default function Home() {
     }
     
     const currentTextForSimulatedVal = textForSimulatedClonedVoiceRef.current; 
-    const currentPreparedTextIsUsableVal = isPreparedTextUsable();  // Uses fresh check
+    const currentPreparedTextIsUsableVal = isPreparedTextUsable(); 
     const currentPreparedSpeechTextVal = preparedSpeechTextRef.current; 
 
     const audioSourceText = currentTextForSimulatedVal ? "simulated cloned audio" : (currentPreparedTextIsUsableVal ? "prepared speech text" : null);
@@ -535,8 +546,6 @@ export default function Home() {
       
       console.log('[handleAnimateFace] Mock processing complete. Setting animation results.');
       setAnimatedVideoResult(mockVideoOutputMessage);
-      // Ensure a unique URL for the placeholder to force re-render if the image content *could* change
-      // For now, it's just a generic placeholder, so timestamp might be overkill but good for future.
       const placeholderImageUrl = `https://placehold.co/640x360.png?t=${Date.now()}`; 
       setMockVideoPlayerImage(placeholderImageUrl);
       console.log('[handleAnimateFace] mockVideoPlayerImage set to:', placeholderImageUrl);
@@ -555,9 +564,8 @@ export default function Home() {
   };
 
   const anyLoading = isGeneratingSpeech || isCloningVoice || isAnimatingFace;
-  // These are used for UI, so they should reflect the *current ref values* for responsiveness
-  const isCurrentPreparedTextSpeaking = isSpeakingRef.current && speakingTextRef.current === preparedSpeechTextRef.current && preparedSpeechTextRef.current !== null;
-  const isCurrentSimulatedClonedVoiceSpeaking = isSimulatedClonedVoiceSpeakingRef.current && textForSimulatedClonedVoiceRef.current !== null;
+  const currentPreparedTextIsSpeaking = isSpeaking && speakingText === preparedSpeechText && preparedSpeechText !== null;
+  const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoice !== null;
 
 
   return (
@@ -614,7 +622,7 @@ export default function Home() {
                   "Process Input for Speech"
                 )}
               </Button>
-              {preparedSpeechTextRef.current && (
+              {preparedSpeechText && (
                 <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">
                   <div className="flex justify-between items-center mb-2">
                     <Label className="text-lg font-semibold text-foreground">Prepared Text for Speech:</Label>
@@ -623,13 +631,13 @@ export default function Home() {
                         onClick={handleSpeakPreparedText}
                         variant="outline"
                         size="sm"
-                        disabled={anyLoading || isSimulatedClonedVoiceSpeakingRef.current || (!isPreparedTextUsable() && !isCurrentPreparedTextSpeaking) }
+                        disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!isPreparedTextUsable() && !currentPreparedTextIsSpeaking) }
                       >
-                        {isCurrentPreparedTextSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
+                        {currentPreparedTextIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
                       </Button>
                     )}
                   </div>
-                  <p className="text-base whitespace-pre-wrap text-foreground/90">{preparedSpeechTextRef.current}</p>
+                  <p className="text-base whitespace-pre-wrap text-foreground/90">{preparedSpeechText}</p>
                    {!isSpeechSupported && isPreparedTextUsable() && (
                     <p className="mt-3 text-sm text-muted-foreground italic">
                       Your browser does not support speech synthesis for direct playback here.
@@ -667,16 +675,16 @@ export default function Home() {
                   <><MicVocal className="mr-2 h-4 w-4" />Generate Speech with Cloned Voice (Mock)</>
                 )}
               </Button>
-              {textForSimulatedClonedVoiceRef.current && (
+              {textForSimulatedClonedVoice && (
                 <div className="mt-4 space-y-2 p-4 border rounded-md bg-muted/30 shadow">
                    <Label className="text-base font-semibold text-foreground">Mock Cloned Audio Output:</Label>
                    <Button
                     onClick={handlePlaySimulatedClonedVoice}
                     variant="outline"
                     size="sm"
-                    disabled={anyLoading || !textForSimulatedClonedVoiceRef.current || isSpeakingRef.current}
+                    disabled={anyLoading || !textForSimulatedClonedVoice || isSpeaking}
                    >
-                     {isCurrentSimulatedClonedVoiceSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Simulated Voice</> : <><Volume2 className="mr-2 h-4 w-4" />Play Simulated Cloned Voice</>}
+                     {currentSimulatedClonedVoiceIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Simulated Voice</> : <><Volume2 className="mr-2 h-4 w-4" />Play Simulated Cloned Voice</>}
                    </Button>
                    <p className="text-sm text-muted-foreground">
                      This simulates the cloned voice using your browser's standard text-to-speech with the prepared text that was active during 'cloning'.
@@ -720,7 +728,7 @@ export default function Home() {
 
               <Button
                 onClick={handleAnimateFace}
-                disabled={anyLoading || !selectedImage || (!isPreparedTextUsable() && !textForSimulatedClonedVoiceRef.current)}
+                disabled={anyLoading || !selectedImage || (!isPreparedTextUsable() && !textForSimulatedClonedVoice)}
                 className="w-full sm:w-auto"
               >
                 {isAnimatingFace ? (
@@ -766,24 +774,24 @@ export default function Home() {
                 {!isAnimatingFace && animatedVideoResult && (
                   <div className="mt-3 space-y-2">
                     <p className="text-sm whitespace-pre-wrap text-foreground/80 bg-background/50 p-3 rounded-md shadow-sm">{animatedVideoResult}</p>
-                    {!textForSimulatedClonedVoiceRef.current && isPreparedTextUsable() && isSpeechSupported && (
+                    {!textForSimulatedClonedVoice && isPreparedTextUsable() && isSpeechSupported && (
                        <Button
                          onClick={handleSpeakPreparedText}
                          variant="outline"
                          size="sm"
-                         disabled={anyLoading || isSimulatedClonedVoiceSpeakingRef.current || (!isCurrentPreparedTextSpeaking && !isPreparedTextUsable()) }
+                         disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (!currentPreparedTextIsSpeaking && !isPreparedTextUsable()) }
                         >
-                        {isCurrentPreparedTextSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Animation Audio (TTS)</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (TTS)</>}
+                        {currentPreparedTextIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Animation Audio (TTS)</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (TTS)</>}
                       </Button>
                     )}
-                    {textForSimulatedClonedVoiceRef.current && isSpeechSupported && (
+                    {textForSimulatedClonedVoice && isSpeechSupported && (
                        <Button
                         onClick={handlePlaySimulatedClonedVoice}
                         variant="outline"
                         size="sm"
-                        disabled={anyLoading || isSpeakingRef.current}
+                        disabled={anyLoading || isSpeaking}
                        >
-                         {isCurrentSimulatedClonedVoiceSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Animation Audio (Simulated)</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (Simulated)</>}
+                         {currentSimulatedClonedVoiceIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Animation Audio (Simulated)</> : <><Volume2 className="mr-2 h-4 w-4" />Play Animation Audio (Simulated)</>}
                        </Button>
                     )}
                   </div>
@@ -802,7 +810,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
-
-    

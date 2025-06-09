@@ -219,7 +219,7 @@ export default function Home() {
     toast({ title: "Animating Face (Mock)", description: "This is a placeholder. In a real app, this would call a lip-sync service." });
     await new Promise(resolve => setTimeout(resolve, 2500)); 
 
-    const mockVideoOutput = `Animation complete using "${staticFaceImage.name}" and audio from the prepared text. The animated video would be displayed here. (Mock Output)`;
+    const mockVideoOutput = `Animation complete using "${staticFaceImage.name}" with audio: "${preparedSpeechText.substring(0, 70)}${preparedSpeechText.length > 70 ? '...' : ''}". The animated video would be displayed here. (Mock Output)`;
     setAnimatedVideoResult(mockVideoOutput);
 
     setIsAnimatingFace(false);
@@ -238,7 +238,7 @@ export default function Home() {
       <main className="flex-grow container mx-auto py-8 px-4">
         <div className="grid gap-8 md:gap-12">
           
-          <SectionCard title="Text & Image to Speech Preparation" icon={<Text className="text-primary" />} >
+          <SectionCard title="Text &amp; Image to Speech Preparation" icon={<Text className="text-primary" />} >
             <div className="space-y-4">
               <div>
                 <Label htmlFor="text-input" className="text-base">Enter your text:</Label>
@@ -304,7 +304,7 @@ export default function Home() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Lip Sync & Face Animation (Week 2)" icon={<Smile className="text-primary" />} >
+          <SectionCard title="Lip Sync &amp; Face Animation (Week 2)" icon={<Smile className="text-primary" />} >
             <div className="space-y-4">
               <div>
                 <Label htmlFor="static-face-image-input" className="text-base">Upload a static face image:</Label>

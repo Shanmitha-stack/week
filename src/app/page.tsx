@@ -32,7 +32,6 @@ export default function Home() {
 
   const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
 
-  const [animatedVideoResult, setAnimatedVideoResult] = useState<string | null>(null);
   const [isAnimatingFace, setIsAnimatingFace] = useState<boolean>(false);
   const [mockVideoPlayerImage, setMockVideoPlayerImage] = useState<string | null>(null);
 
@@ -109,7 +108,6 @@ export default function Home() {
   const resetAllOutputsDependentOnTextOrImage = () => {
     setPreparedSpeechText(null);
     setTextForSimulatedClonedVoice(null); 
-    setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
@@ -168,7 +166,6 @@ export default function Home() {
     setIsGeneratingSpeech(true);
     setPreparedSpeechText(null); 
     setTextForSimulatedClonedVoice(null);
-    setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
 
     let imageDataUri: string | undefined = undefined;
@@ -339,7 +336,6 @@ export default function Home() {
     else setSelectedVoiceSample(null);
     
     setTextForSimulatedClonedVoice(null);
-    setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
@@ -393,7 +389,6 @@ export default function Home() {
     setIsSimulatedClonedVoiceSpeaking(false);
     
     setTextForSimulatedClonedVoice(null); 
-    setAnimatedVideoResult(null);
     setMockVideoPlayerImage(null);
     
     try {
@@ -508,7 +503,6 @@ export default function Home() {
 
   const anyLoading = isGeneratingSpeech || isCloningVoice || isAnimatingFace;
 
-  // Derived state for audio availability for animation
   const hasPreparedTextAudio =
     !!(preparedSpeechText &&
     preparedSpeechText.trim() !== "" &&
@@ -558,22 +552,21 @@ export default function Home() {
     setIsSimulatedClonedVoiceSpeaking(false);
 
     setIsAnimatingFace(true);
-    setAnimatedVideoResult(null); 
     setMockVideoPlayerImage(null); 
 
     try {
       toast({ title: "Starting Mock Animation Process", description: "Preprocessing face image (simulated)..." });
       await new Promise(resolve => setTimeout(resolve, 1000)); 
 
-      let animationCreativePrompt = `Generate a single, still image frame of the person in the provided photo, looking as if they are part of a video and speaking. `;
+      let animationCreativePrompt = `Generate a single, still image frame of the person in the provided photo, looking as if they are part of a video and speaking.`;
       const audioTextContext = currentHasSimulatedClonedAudio && textForSimulatedClonedVoice 
         ? textForSimulatedClonedVoice 
         : (currentHasPreparedTextAudio && preparedSpeechText ? preparedSpeechText : "");
       
       if (audioTextContext) {
-        animationCreativePrompt += `They might be saying something like: "${audioTextContext.substring(0, 100)}...".`;
+        animationCreativePrompt += ` They might be saying something like: "${audioTextContext.substring(0, 100)}...".`;
       }
-      animationCreativePrompt += ` The style should be consistent with the input photo, suitable for a video frame. Do not add text overlays or speech bubbles to the image. Focus on a natural expression.`;
+      animationCreativePrompt += ` The style should be consistent with the input photo, suitable for a video frame. Critically, ensure the entire face is clearly visible and maintain a framing similar to the original input photo. Avoid extreme close-ups of any single feature like the lips. Do not add text overlays or speech bubbles to the image. Focus on a natural expression.`;
       
       toast({ title: "Generating Mock Animation Frame", description: "Using AI to create a dynamic placeholder frame..." });
       
@@ -584,11 +577,9 @@ export default function Home() {
 
       if (frameResult.generatedFrameDataUri) {
         setMockVideoPlayerImage(frameResult.generatedFrameDataUri);
-        setAnimatedVideoResult(null); // Remove descriptive text
         toast({ title: "Mock Animation Frame Generated", description: "AI-generated placeholder frame is now available." });
       } else {
         setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}`); 
-        setAnimatedVideoResult(null); // Remove descriptive text
         toast({ title: "Mock Frame Generation Failed", description: frameResult.errorMessage || "Could not generate AI frame, using fallback.", variant: "destructive" });
       }
       console.log('[handleAnimateFace] Mock processing complete.');
@@ -596,7 +587,6 @@ export default function Home() {
     } catch (error: any) {
       console.error("Error during face animation process:", error);
       toast({ title: "Animation Error", description: "An unexpected error occurred during face animation.", variant: "destructive" });
-      setAnimatedVideoResult(null); // Remove descriptive text
       setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}`);
     } finally {
       setIsAnimatingFace(false);
@@ -806,7 +796,7 @@ export default function Home() {
                       alt="Mock animated frame placeholder"
                       width={640}
                       height={360}
-                      className="object-contain"
+                      className="object-contain w-full h-full"
                       data-ai-hint={mockVideoPlayerImage.startsWith('data:image') ? "ai portrait" : "generic placeholder"}
                     />
                   ) : (
@@ -817,9 +807,8 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                {!isAnimatingFace && animatedVideoResult && (
+                {!isAnimatingFace && mockVideoPlayerImage && ( // Show buttons if mockVideoPlayerImage exists (not just animatedVideoResult)
                   <div className="mt-3 space-y-2">
-                    <p className="text-sm whitespace-pre-wrap text-foreground/80 bg-background/50 p-3 rounded-md shadow-sm">{animatedVideoResult}</p>
                     {!textForSimulatedClonedVoice && hasPreparedTextAudio && isSpeechSupported && (
                        <Button
                          onClick={handleSpeakPreparedText}
@@ -857,3 +846,4 @@ export default function Home() {
   );
 }
 
+    

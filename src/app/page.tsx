@@ -34,9 +34,7 @@ export default function Home() {
 
   const [isAnimatingFace, setIsAnimatingFace] = useState<boolean>(false);
   const [mockVideoPlayerImage, setMockVideoPlayerImage] = useState<string | null>(null);
-  // const [animatedVideoResult, setAnimatedVideoResult] = useState<string | null>(null);
-
-
+  
   const { toast } = useToast();
 
   const isSpeakingRef = useRef(isSpeaking);
@@ -111,7 +109,6 @@ export default function Home() {
     setPreparedSpeechText(null);
     setTextForSimulatedClonedVoice(null); 
     setMockVideoPlayerImage(null);
-    // setAnimatedVideoResult(null);
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
         window.speechSynthesis.cancel();
@@ -170,7 +167,6 @@ export default function Home() {
     setPreparedSpeechText(null); 
     setTextForSimulatedClonedVoice(null);
     setMockVideoPlayerImage(null);
-    // setAnimatedVideoResult(null);
 
     let imageDataUri: string | undefined = undefined;
     if (imagePreview && selectedImage) { 
@@ -341,7 +337,6 @@ export default function Home() {
     
     setTextForSimulatedClonedVoice(null);
     setMockVideoPlayerImage(null);
-    // setAnimatedVideoResult(null);
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
         window.speechSynthesis.cancel();
@@ -395,7 +390,6 @@ export default function Home() {
     
     setTextForSimulatedClonedVoice(null); 
     setMockVideoPlayerImage(null);
-    // setAnimatedVideoResult(null);
     
     try {
       await new Promise(resolve => setTimeout(resolve, 1000)); 
@@ -509,14 +503,9 @@ export default function Home() {
 
   const anyLoading = isGeneratingSpeech || isCloningVoice || isAnimatingFace;
 
-  const hasPreparedTextAudio =
-    !!(preparedSpeechText &&
-    preparedSpeechText.trim() !== "" &&
-    !preparedSpeechText.toLowerCase().startsWith("no text was provided") &&
-    !preparedSpeechText.toLowerCase().startsWith("error:"));
-
-  const hasSimulatedClonedAudio = !!(textForSimulatedClonedVoice && textForSimulatedClonedVoice.trim() !== "");
-  const isAudioAvailableForAnimation = hasPreparedTextAudio || hasSimulatedClonedAudio;
+  const isAudioAvailableForAnimation =
+    (preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && !preparedSpeechText.toLowerCase().startsWith("error:")) ||
+    (textForSimulatedClonedVoice && textForSimulatedClonedVoice.trim() !== "");
 
 
   const handleAnimateFace = useCallback(async () => {
@@ -557,16 +546,15 @@ export default function Home() {
 
     setIsAnimatingFace(true);
     setMockVideoPlayerImage(null); 
-    // setAnimatedVideoResult(null);
 
     try {
       toast({ title: "Starting Mock Animation Process", description: "Preprocessing face image (simulated)..." });
       await new Promise(resolve => setTimeout(resolve, 1000)); 
 
       let animationCreativePrompt = `Generate a single, still image frame of the person in the provided photo, looking as if they are part of a video and speaking. Critically, ensure the entire face is clearly visible and maintain a framing similar to the original input photo. Avoid extreme close-ups of any single feature like the lips.`;
-      const audioTextContext = currentHasSimulatedClonedAudio && textForSimulatedClonedVoice 
-        ? textForSimulatedClonedVoice 
-        : (currentHasPreparedTextAudio && preparedSpeechText ? preparedSpeechText : "");
+      const audioTextContext = (audioSourceForAnimationLogic === "simulated cloned audio" && textForSimulatedClonedVoice)
+        ? textForSimulatedClonedVoice
+        : ((audioSourceForAnimationLogic === "prepared speech text" && preparedSpeechText) ? preparedSpeechText : "");
       
       if (audioTextContext) {
         animationCreativePrompt += ` They might be saying something like: "${audioTextContext.substring(0, 100)}...".`;
@@ -584,17 +572,37 @@ export default function Home() {
         setMockVideoPlayerImage(frameResult.generatedFrameDataUri);
         toast({ title: "Mock Animation Frame Generated", description: "AI-generated placeholder frame is now available." });
         
-        // Auto-play audio after image is set
         if (isSpeechSupported) {
             setTimeout(() => {
+              const latestPreparedText = preparedSpeechTextRef.current;
+              const latestClonedText = textForSimulatedClonedVoiceRef.current;
+              const canPlayPrepared = latestPreparedText && latestPreparedText.trim() !== "" && !latestPreparedText.toLowerCase().startsWith("no text was provided") && !latestPreparedText.toLowerCase().startsWith("error:");
+              const canPlayCloned = latestClonedText && latestClonedText.trim() !== "";
+
+              let playedAudio = false;
               if (audioSourceForAnimationLogic === "simulated cloned audio") {
-                console.log('[handleAnimateFace] Auto-playing simulated cloned voice.');
-                handlePlaySimulatedClonedVoice();
+                if (canPlayCloned) {
+                  console.log('[handleAnimateFace] Auto-playing simulated cloned voice (intended source).');
+                  handlePlaySimulatedClonedVoice();
+                  playedAudio = true;
+                } else {
+                  console.warn('[handleAnimateFace auto-play] Intended "simulated cloned audio" source became unavailable.');
+                }
               } else if (audioSourceForAnimationLogic === "prepared speech text") {
-                console.log('[handleAnimateFace] Auto-playing prepared TTS.');
-                handleSpeakPreparedText();
+                if (canPlayPrepared) {
+                  console.log('[handleAnimateFace] Auto-playing prepared TTS (intended source).');
+                  handleSpeakPreparedText();
+                  playedAudio = true;
+                } else {
+                  console.warn('[handleAnimateFace auto-play] Intended "prepared speech text" source became unavailable.');
+                }
               }
-            }, 200); // Small delay for UI update
+
+              if (!playedAudio) {
+                console.log('[handleAnimateFace] Auto-play: Intended audio source for animation was not available at playback time.');
+                toast({ title: "Auto-play Skipped", description: "The audio intended for animation was not ready for playback.", variant: "default" });
+              }
+            }, 200);
         }
 
       } else {
@@ -602,13 +610,11 @@ export default function Home() {
         toast({ title: "Mock Frame Generation Failed", description: frameResult.errorMessage || "Could not generate AI frame, using fallback.", variant: "destructive" });
       }
       console.log('[handleAnimateFace] Mock processing complete.');
-      // setAnimatedVideoResult(null); // Removed descriptive text
 
     } catch (error: any) {
       console.error("Error during face animation process:", error);
       toast({ title: "Animation Error", description: "An unexpected error occurred during face animation.", variant: "destructive" });
       setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}`);
-      // setAnimatedVideoResult(null); // Removed descriptive text
     } finally {
       setIsAnimatingFace(false);
       console.log('[handleAnimateFace] Completed. isAnimatingFace set to false.');
@@ -828,7 +834,6 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                {/* Removed descriptive text and associated audio buttons from here, as audio now auto-plays */}
               </div>
                <p className="text-sm text-muted-foreground mt-4">
                 This section demonstrates the UI for a face animation feature. The "Animate Face" button uses AI to generate a *single still image* as a dynamic placeholder. When the image appears, the system will attempt to auto-play the corresponding audio. Actual lip-synced video animation requires a dedicated backend service not implemented here.
@@ -843,5 +848,3 @@ export default function Home() {
     </div>
   );
 }
-
-    

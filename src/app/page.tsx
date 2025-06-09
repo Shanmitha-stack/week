@@ -27,7 +27,6 @@ export default function Home() {
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
 
-  // New state for Lip Sync & Face Animation
   const [staticFaceImage, setStaticFaceImage] = useState<File | null>(null);
   const [staticFaceImagePreview, setStaticFaceImagePreview] = useState<string | null>(null);
   const [animatedVideoResult, setAnimatedVideoResult] = useState<string | null>(null);
@@ -82,7 +81,7 @@ export default function Home() {
 
     setIsGeneratingSpeech(true);
     setPreparedSpeechText(null); 
-    setAnimatedVideoResult(null); // Clear animation result if input changes
+    setAnimatedVideoResult(null); 
 
     let imageDataUri: string | undefined = undefined;
     if (selectedImage) {
@@ -357,7 +356,7 @@ export default function Home() {
                   */}
                 </div>
               )}
-               <p className="text-sm text-muted-foreground">
+               <p className="text-sm text-muted-foreground mt-4">
                 This section demonstrates the planned UI for lip-syncing a static face image with the generated audio.
                 The actual animation processing (e.g., using Wav2Lip/SadTalker) would be handled by a backend service, which is not implemented here.
               </p>
@@ -396,3 +395,4 @@ export default function Home() {
       </footer>
     </div>
   );
+}

@@ -22,7 +22,7 @@ const GenerateAnimatedFrameInputSchema = z.object({
   animationPrompt: z
     .string()
     .describe(
-      'A text prompt to guide the generation of a new, expressive image frame. The prompt should encourage the AI to generate a natural speaking expression, potentially with emotion, suitable for the provided text, as if it\'s a frame from a video. E.g., "Generate an image of this person speaking with a happy expression, as a frame from a video."'
+      'A text prompt to guide the AI in generating a new image frame. The prompt should encourage the AI to create a natural, clear, and expressive facial animation that conveys appropriate emotion for the provided text, as if it\'s a keyframe from an animated video. E.g., "Generate an image of this person speaking with a joyful expression, emphasizing the emotion in their face, like a frame from a video."'
     ),
 });
 export type GenerateAnimatedFrameInput = z.infer<typeof GenerateAnimatedFrameInputSchema>;

@@ -575,13 +575,8 @@ export default function Home() {
         }
 
         if (response.status === 404 && response.url.includes('/api/true-lip-sync-video')) {
-          console.warn(`[handleGenerateVideo] Backend endpoint ${response.url} not found (404). This is expected as the backend is not implemented.`);
-          toast({
-            title: "Backend Feature Placeholder",
-            description: "The true lip-sync video generation endpoint (/api/true-lip-sync-video) is not yet implemented. This is an expected placeholder.",
-            variant: "default",
-            duration: 6000,
-          });
+          console.warn(`[handleGenerateVideo] Backend endpoint ${response.url} not found (404). This is expected as the backend is not implemented. UI will be silent.`);
+          // No toast for this specific expected 404. UI remains silent.
           // Do not set videoGenerationError for this specific expected 404
         } else {
           const errorMessage = errorData?.message || `Backend error: ${response.status} ${response.statusText || 'Status text unavailable'}`;
@@ -809,7 +804,7 @@ export default function Home() {
                 <p>
                   This feature attempts to call a backend service (at <code>/api/true-lip-sync-video</code>) to generate a lip-synced video.
                   True video lip-sync (like that produced by models such as Wav2Lip or SadTalker) requires a dedicated backend service, which is not implemented in this demonstration frontend. 
-                  The button above will try to make an API call to this placeholder endpoint. If the endpoint doesn't exist (as is currently the case), a '404 Not Found' error will occur, which is expected.
+                  The button above will try to make an API call to this placeholder endpoint. If the endpoint doesn't exist (as is currently the case), a '404 Not Found' error will occur, which is expected and will be silently logged to the console.
                 </p>
               </div>
 

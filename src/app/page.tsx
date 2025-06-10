@@ -573,11 +573,23 @@ export default function Home() {
         } catch (e) {
           console.warn('[handleGenerateVideo] Could not parse JSON from error response. This is common for 404 errors if the server sends HTML/text instead of JSON.');
         }
-        const errorMessage = errorData?.message || `Backend error: ${response.status} ${response.statusText || 'Status text unavailable'}`;
-        console.error('[handleGenerateVideo] Backend request failed:', errorMessage, ...(errorData ? [errorData] : [`Status: ${response.status}`]));
-        setVideoGenerationError(errorMessage);
-        toast({ title: "Video Generation Failed", description: errorMessage, variant: "destructive" });
-        return;
+
+        if (response.status === 404 && response.url.includes('/api/true-lip-sync-video')) {
+          console.warn(`[handleGenerateVideo] Backend endpoint ${response.url} not found (404). This is expected as the backend is not implemented.`);
+          toast({
+            title: "Backend Feature Placeholder",
+            description: "The true lip-sync video generation endpoint (/api/true-lip-sync-video) is not yet implemented. This is an expected placeholder.",
+            variant: "default",
+            duration: 6000,
+          });
+          // Do not set videoGenerationError for this specific expected 404
+        } else {
+          const errorMessage = errorData?.message || `Backend error: ${response.status} ${response.statusText || 'Status text unavailable'}`;
+          console.error('[handleGenerateVideo] Backend request failed:', errorMessage, ...(errorData ? [errorData] : [`Status: ${response.status}`]));
+          setVideoGenerationError(errorMessage);
+          toast({ title: "Video Generation Failed", description: errorMessage, variant: "destructive" });
+        }
+        return; // Stop further processing
       }
 
       const result = await response.json();
@@ -854,3 +866,4 @@ export default function Home() {
     </div>
   );
 }
+

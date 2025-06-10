@@ -23,14 +23,15 @@ const GenerateAnimatedFrameInputSchema = z.object({
   animationPrompt: z
     .string()
     .describe(
-      'A text prompt to guide the AI in generating a new image frame. The prompt should instruct the AI to create a single, expressive keyframe image of the person in the provided photo, depicting them frozen mid-speech, as if they are just starting to speak the given text. It must emphasize that the mouth shape (viseme) and overall facial expression MUST precisely match the very first sounds/phonemes of the text. The expression should also convey appropriate emotion for this initial part of the text. E.g., "Your task is to generate a single, expressive keyframe image... CRITICAL: The mouth shape (viseme)... MUST precisely match the very first sounds/phonemes of the text: [text snippet]..."'
+      'A text prompt to guide the AI in generating a new image frame. The prompt should instruct the AI to create a single, expressive keyframe image of the person in the provided photo, depicting them frozen mid-speech, as if they are just starting to speak the given text. CRITICAL: The mouth shape (viseme) and overall facial expression MUST precisely match the very first sounds/phonemes of the text. The expression should also convey appropriate emotion for this initial part of the text. E.g., "Your task is to generate a single, expressive keyframe image... CRITICAL: The mouth shape (viseme)... MUST precisely match the very first sounds/phonemes of the text: [text snippet]..."'
     ),
 });
 export type GenerateAnimatedFrameInput = z.infer<typeof GenerateAnimatedFrameInputSchema>;
 
 const GenerateAnimatedFrameOutputSchema = z.object({
   generatedFrameDataUri: z.string().optional().describe('The generated image frame as a data URI, if successful.'),
-  errorMessage: z.string().optional().describe('An error message if generation failed.'),
+  errorType: z.enum(['AI_DID_NOT_RETURN_IMAGE', 'AI_API_ERROR', 'FLOW_EXCEPTION']).optional().describe('Category of error, if one occurred.'),
+  errorMessage: z.string().optional().describe('An error message if generation failed or an issue occurred.'),
 });
 export type GenerateAnimatedFrameOutput = z.infer<typeof GenerateAnimatedFrameOutputSchema>;
 
@@ -66,17 +67,25 @@ const generateAnimatedFrameFlow = ai.defineFlow(
       if (media && media.url) {
         return { generatedFrameDataUri: media.url };
       } else {
-        console.warn('[generateAnimatedFrameFlow] Image generation did not return a media URL. Text response:', text);
-        return { errorMessage: `Image generation succeeded but returned no image. AI said: ${text || 'No text response.'}` };
+        console.warn('[generateAnimatedFrameFlow] Image generation did not return a media URL. AI Text response:', text);
+        return { 
+          errorType: 'AI_DID_NOT_RETURN_IMAGE', 
+          errorMessage: `The AI model processed the request but did not return an image. AI text response: ${text || 'None'}` 
+        };
       }
     } catch (error: any) {
-      console.error('[generateAnimatedFrameFlow] Error generating mock animated frame:', error);
-      const message = error.message || 'An unexpected error occurred during mock frame generation.';
+      console.error('[generateAnimatedFrameFlow] Error during AI frame generation:', error);
+      const message = error.message || 'An unexpected error occurred during AI frame generation.';
       if (error.finishReason) {
-        return { errorMessage: `Generation failed. Reason: ${error.finishReason}. Details: ${message}` };
+        return { 
+          errorType: 'AI_API_ERROR', 
+          errorMessage: `AI API call failed. Reason: ${error.finishReason}. Details: ${message}` 
+        };
       }
-      return { errorMessage: message };
+      return { 
+        errorType: 'FLOW_EXCEPTION', 
+        errorMessage: `An unexpected error occurred in the animation flow: ${message}` 
+      };
     }
   }
 );
-

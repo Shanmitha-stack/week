@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff, AlertTriangle } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame } from '@/ai/flows/generate-animated-frame-flow';
 
@@ -34,6 +34,7 @@ export default function Home() {
 
   const [isAnimatingFace, setIsAnimatingFace] = useState<boolean>(false);
   const [mockVideoPlayerImage, setMockVideoPlayerImage] = useState<string | null>(null);
+  const [imageLoadError, setImageLoadError] = useState<string | null>(null);
   
   const { toast } = useToast();
 
@@ -109,6 +110,7 @@ export default function Home() {
     setPreparedSpeechText(null);
     setTextForSimulatedClonedVoice(null); 
     setMockVideoPlayerImage(null);
+    setImageLoadError(null);
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
         window.speechSynthesis.cancel();
@@ -167,6 +169,7 @@ export default function Home() {
     setPreparedSpeechText(null); 
     setTextForSimulatedClonedVoice(null);
     setMockVideoPlayerImage(null);
+    setImageLoadError(null);
 
     let imageDataUri: string | undefined = undefined;
     if (imagePreview && selectedImage) { 
@@ -337,6 +340,7 @@ export default function Home() {
     
     setTextForSimulatedClonedVoice(null);
     setMockVideoPlayerImage(null);
+    setImageLoadError(null);
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
         window.speechSynthesis.cancel();
@@ -390,6 +394,7 @@ export default function Home() {
     
     setTextForSimulatedClonedVoice(null); 
     setMockVideoPlayerImage(null);
+    setImageLoadError(null);
     
     try {
       await new Promise(resolve => setTimeout(resolve, 1000)); 
@@ -509,6 +514,8 @@ export default function Home() {
 
 
   const handleAnimateFace = useCallback(async () => {
+    setImageLoadError(null); // Reset image load error state
+
     const currentHasPreparedTextAudio = preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && !preparedSpeechText.toLowerCase().startsWith("error:");
     const currentHasSimulatedClonedAudio = !!(textForSimulatedClonedVoice && textForSimulatedClonedVoice.trim() !== "");
     const audioSourceForAnimationLogic = currentHasSimulatedClonedAudio
@@ -518,8 +525,8 @@ export default function Home() {
     console.log('[handleAnimateFace] Initiated. States:', {
       selectedImageName: selectedImage?.name,
       imagePreviewAvailable: !!imagePreview,
-      preparedSpeechText,
-      textForSimulatedClonedVoice,
+      preparedSpeechTextValue: preparedSpeechText ? preparedSpeechText.substring(0, 50) + '...' : null,
+      textForSimulatedClonedVoiceValue: textForSimulatedClonedVoice ? textForSimulatedClonedVoice.substring(0, 50) + '...' : null,
       selectedVoiceSampleName: selectedVoiceSample?.name,
       audioSourceForAnimationLogic,
     });
@@ -566,7 +573,7 @@ export default function Home() {
       
       toast({ title: "Generating Mock Animation Frame", description: "Using AI to create a dynamic placeholder frame..." });
       
-      console.log('[handleAnimateFace] Calling generateAnimatedFrame with prompt:', animationCreativePrompt, 'and imagePreview (first 100 chars):', imagePreview?.substring(0, 100));
+      console.log('[handleAnimateFace] Calling generateAnimatedFrame with prompt (first 150 chars):', animationCreativePrompt.substring(0,150), 'and imagePreview (first 100 chars):', imagePreview?.substring(0, 100));
       const frameResult = await generateAnimatedFrame({
         originalImageDataUri: imagePreview as string, 
         animationPrompt: animationCreativePrompt,
@@ -575,7 +582,7 @@ export default function Home() {
 
 
       if (frameResult.generatedFrameDataUri) {
-        console.log('[handleAnimateFace] AI frame generation successful. Setting image:', frameResult.generatedFrameDataUri.substring(0,100) + "...");
+        console.log('[handleAnimateFace] AI frame generation successful. Setting image (first 100 chars):', frameResult.generatedFrameDataUri.substring(0,100) + "...");
         setMockVideoPlayerImage(frameResult.generatedFrameDataUri);
         toast({ title: "Mock Animation Frame Generated", description: "AI-generated placeholder frame is now available." });
         
@@ -638,6 +645,7 @@ export default function Home() {
   console.log('[Home render] States before JSX:', {
     isAnimatingFace,
     mockVideoPlayerImage: mockVideoPlayerImage ? mockVideoPlayerImage.substring(0,100) + "..." : null,
+    imageLoadError,
     isGeneratingSpeech,
     isCloningVoice,
     preparedSpeechText: preparedSpeechText ? preparedSpeechText.substring(0,50) + "..." : null,
@@ -843,7 +851,24 @@ export default function Home() {
                       width={640}
                       height={360}
                       className="object-contain w-full h-full"
-                      data-ai-hint={mockVideoPlayerImage.startsWith('data:image') ? "ai portrait" : (mockVideoPlayerImage.includes('ai_fail') || mockVideoPlayerImage.includes('err=hc') ? "generic error placeholder" : "generic placeholder")}
+                      data-ai-hint={
+                        mockVideoPlayerImage.startsWith('data:image') ? "ai portrait" :
+                        (mockVideoPlayerImage.includes('ai_fail=1') ? "generic error placeholder" :
+                        (mockVideoPlayerImage.includes('err=hc') ? "generic error placeholder" : 
+                        (mockVideoPlayerImage.includes('img_err=1') ? "generic error placeholder" : "generic placeholder")))
+                      }
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        console.error('Next/Image Error loading src:', target.src);
+                        setImageLoadError('Error loading the generated/fallback image. A fallback placeholder is shown.');
+                        // Force a known good fallback if the AI image or initial fallback fails to load via next/image
+                        if (!mockVideoPlayerImage || !mockVideoPlayerImage.includes('placehold.co')) {
+                           setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}&img_load_err=1`);
+                        }
+                      }}
+                      onLoad={() => {
+                        setImageLoadError(null); // Clear error on successful load
+                      }}
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
@@ -853,6 +878,12 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+                {imageLoadError && (
+                  <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5"/>
+                    <p>{imageLoadError}</p>
+                  </div>
+                )}
               </div>
                <p className="text-sm text-muted-foreground mt-4">
                 This section demonstrates the UI for a face animation feature. The "Animate Face" button uses AI to generate a *single still image* as a dynamic placeholder. When the image appears, the system will attempt to auto-play the corresponding audio. Actual lip-synced video animation requires a dedicated backend service not implemented here.

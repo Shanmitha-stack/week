@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Sparkles } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
-import { generateAnimatedFrame } from '@/ai/flows/generate-animated-frame-flow';
+import { generateAnimatedFrame, type GenerateAnimatedFrameOutput } from '@/ai/flows/generate-animated-frame-flow';
 
 
 export default function Home() {
@@ -40,9 +40,8 @@ export default function Home() {
   
   const [activeDisplayFrame, setActiveDisplayFrame] = useState<string | null>(null);
   const [isFlickerAnimationActive, setIsFlickerAnimationActive] = useState<boolean>(false);
+  
   const animationIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-
   const { toast } = useToast();
 
   const isSpeakingRef = useRef(isSpeaking);
@@ -53,6 +52,7 @@ export default function Home() {
   const imagePreviewRef = useRef<string | null>(null);
   const animatedFramePreviewRef = useRef<string | null>(null);
   const animationErrorRef = useRef(animationError);
+  const currentFrameAudioTextRef = useRef(currentFrameAudioText);
 
 
   const stopFlickerAnimation = useCallback(() => {
@@ -61,16 +61,18 @@ export default function Home() {
       animationIntervalRef.current = null;
     }
     setIsFlickerAnimationActive(false);
+
     if (animationErrorRef.current && imagePreviewRef.current) {
-        setActiveDisplayFrame(imagePreviewRef.current);
-    } else if (animatedFramePreviewRef.current && (!speakingTextRef.current || speakingTextRef.current !== currentFrameAudioText)) { 
-         setActiveDisplayFrame(animatedFramePreviewRef.current);
+      setActiveDisplayFrame(imagePreviewRef.current); 
+    } else if (animatedFramePreviewRef.current) {
+      setActiveDisplayFrame(animatedFramePreviewRef.current); 
     } else if (imagePreviewRef.current) {
-         setActiveDisplayFrame(imagePreviewRef.current);
+      setActiveDisplayFrame(imagePreviewRef.current); 
     } else {
-        setActiveDisplayFrame(null); 
+      setActiveDisplayFrame(null); 
     }
-  }, [currentFrameAudioText]); 
+  }, []); 
+
 
   const startFlickerAnimation = useCallback(() => {
     if (!imagePreviewRef.current || !animatedFramePreviewRef.current) return;
@@ -86,6 +88,10 @@ export default function Home() {
 
 
   useEffect(() => {
+    currentFrameAudioTextRef.current = currentFrameAudioText;
+  }, [currentFrameAudioText]);
+
+  useEffect(() => {
     animationErrorRef.current = animationError;
   }, [animationError]);
 
@@ -97,23 +103,23 @@ export default function Home() {
       if (isFlickerAnimationActive) stopFlickerAnimation();
     } else {
       if (!isFlickerAnimationActive) {
-        if (animatedFramePreviewRef.current && (!speakingTextRef.current || speakingTextRef.current !== currentFrameAudioText)) {
+         if (animatedFramePreviewRef.current && (!speakingTextRef.current || speakingTextRef.current !== currentFrameAudioTextRef.current)) {
           setActiveDisplayFrame(animatedFramePreviewRef.current);
         } else {
           setActiveDisplayFrame(imagePreview);
         }
       }
     }
-  }, [imagePreview, isFlickerAnimationActive, stopFlickerAnimation, currentFrameAudioText]); 
+  }, [imagePreview, isFlickerAnimationActive, stopFlickerAnimation]); 
 
   useEffect(() => {
     animatedFramePreviewRef.current = animatedFramePreview;
      if (!animatedFramePreview && !isFlickerAnimationActive) {
         setActiveDisplayFrame(imagePreviewRef.current);
-    } else if (animatedFramePreview && !isFlickerAnimationActive && (!speakingTextRef.current || speakingTextRef.current !== currentFrameAudioText)) {
+    } else if (animatedFramePreview && !isFlickerAnimationActive && (!speakingTextRef.current || speakingTextRef.current !== currentFrameAudioTextRef.current)) {
         setActiveDisplayFrame(animatedFramePreview);
     }
-  }, [animatedFramePreview, isFlickerAnimationActive, currentFrameAudioText]);
+  }, [animatedFramePreview, isFlickerAnimationActive]);
 
 
   useEffect(() => {
@@ -181,6 +187,7 @@ export default function Home() {
     
     setAnimatedFramePreview(null);
     setCurrentFrameAudioText(null); 
+    setAnimationError(null);
     setActiveDisplayFrame(imagePreviewRef.current); 
     if (isFlickerAnimationActive) stopFlickerAnimation();
 
@@ -198,7 +205,6 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedImage(file);
-      setAnimationError(null); 
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
@@ -244,6 +250,7 @@ export default function Home() {
     if (isFlickerAnimationActive) stopFlickerAnimation();
     
     setAnimatedFramePreview(null); 
+    setAnimationError(null);
     setActiveDisplayFrame(imagePreviewRef.current);
 
 
@@ -556,7 +563,7 @@ export default function Home() {
       textToSpeakForFrame = preparedSpeechTextRef.current;
     }
     
-    const currentAudioIsActive = isSpeaking && currentFrameAudioText === textToSpeakForFrame && isFlickerAnimationActive;
+    const currentAudioIsActive = isSpeaking && speakingTextRef.current === textToSpeakForFrame && isFlickerAnimationActive;
 
     if (currentAudioIsActive) {
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
@@ -594,33 +601,33 @@ export default function Home() {
 
     try {
       const textSnippet = textToSpeakForFrame.substring(0, 150); 
-      const animationPrompt = `Your task is to generate a single, expressive keyframe image of the person in the provided photo. This keyframe should depict them frozen mid-speech, as if they are just starting to speak the given text. CRITICAL: The mouth shape (viseme) and overall facial expression MUST precisely match the very first sounds/phonemes of the text: "${textSnippet}". The expression should also convey the appropriate emotion for this initial part of the text. Make it look like a high-quality animation cel ready for a speaking scene.`;
+      const animationPrompt = `Generate a single, highly expressive keyframe image of the person from the photo. This image should clearly show them in the act of speaking the very beginning of the text: "${textSnippet}". Focus on visible facial animation: ensure the mouth shape (viseme) precisely matches the initial phonemes of the text, and the eyes and overall facial expression vividly convey the act of speaking and the appropriate emotion. The image should look like a dynamic snapshot from an animation, capturing clear facial movement.`;
       
-      const result = await generateAnimatedFrame({
+      const result: GenerateAnimatedFrameOutput = await generateAnimatedFrame({
           originalImageDataUri: imagePreviewRef.current,
           animationPrompt: animationPrompt,
       });
 
-      if (result.errorType || result.errorMessage) {
-        const errorMsg = result.errorMessage || "An unknown animation error occurred.";
-        setAnimationError(errorMsg);
-        setActiveDisplayFrame(imagePreviewRef.current); // Revert to original on any error during frame gen
+      const flowErrorMessage = result.errorMessage;
+      const flowErrorType = result.errorType;
 
-        if (result.errorType === 'AI_DID_NOT_RETURN_IMAGE') {
-            console.warn('[GenerateAnimatedFrame] Info: AI model did not return an image.', errorMsg);
-            toast({ title: "AI Image Issue", description: errorMsg, variant: "default" });
+      if (flowErrorMessage) {
+        if (flowErrorType === 'AI_DID_NOT_RETURN_IMAGE') {
+            console.warn('[GenerateAnimatedFrame] Info: AI model did not return an image.', flowErrorMessage);
+            toast({ title: "AI Image Issue", description: flowErrorMessage, variant: "default" });
         } else { 
-            console.error('[GenerateAnimatedFrame] Error during AI frame generation:', errorMsg);
-            toast({ title: "Animation Error", description: errorMsg, variant: "destructive" });
+            console.error('[GenerateAnimatedFrame] AI Flow Error:', flowErrorMessage);
+            toast({ title: "Animation Error", description: flowErrorMessage, variant: "destructive" });
         }
+        setAnimationError(flowErrorMessage);
+        setActiveDisplayFrame(imagePreviewRef.current); 
       } else if (result.generatedFrameDataUri) {
         setAnimatedFramePreview(result.generatedFrameDataUri);
-        // setActiveDisplayFrame(result.generatedFrameDataUri); // Will be handled by startFlickerAnimation or if speech fails
         toast({ title: "AI Frame Ready!", description: "Preparing to speak...", duration: 2000 });
 
         if (isSpeechSupported) {
             setTimeout(() => {
-            if (currentFrameAudioText !== textToSpeakForFrame || !animatedFramePreviewRef.current || animationErrorRef.current) { 
+            if (currentFrameAudioTextRef.current !== textToSpeakForFrame || !animatedFramePreviewRef.current || animationErrorRef.current) { 
                 if (isFlickerAnimationActive) stopFlickerAnimation();
                 setActiveDisplayFrame(animationErrorRef.current ? imagePreviewRef.current : (animatedFramePreviewRef.current || imagePreviewRef.current));
                 setIsSpeaking(false);
@@ -656,17 +663,17 @@ export default function Home() {
             }, 100); 
         } else {
             toast({ title: "AI Frame Ready", description: "Browser speech not supported for playback.", variant: "default" });
-            setActiveDisplayFrame(result.generatedFrameDataUri); 
+            if (result.generatedFrameDataUri) setActiveDisplayFrame(result.generatedFrameDataUri); 
+            else if (imagePreviewRef.current) setActiveDisplayFrame(imagePreviewRef.current);
         }
       } else {
-        // Fallback for the unexpected case where flow returns no error and no data URI
         const unexpectedMsg = "AI frame generation completed without an image or a specific error message.";
         console.warn('[GenerateAnimatedFrame] Unexpected outcome from AI flow:', unexpectedMsg);
         setAnimationError(unexpectedMsg);
         toast({ title: "Animation Issue", description: unexpectedMsg, variant: "default" });
         setActiveDisplayFrame(imagePreviewRef.current); 
       }
-    } catch (error: any) { // Catch errors from calling generateAnimatedFrame itself or other logic here
+    } catch (error: any) { 
       console.error('[GenerateAnimatedFrame] General client-side processing error:', error);
       const message = error.message || "An unexpected client-side error occurred during frame generation.";
       setAnimationError(message);
@@ -674,9 +681,8 @@ export default function Home() {
       setActiveDisplayFrame(imagePreviewRef.current); 
     } finally {
       setIsGeneratingFrame(false);
-      // Ensure display consistency if speech didn't start or an error occurred before speech could set flicker
-      const speechNotRunningOrErrorOccurred = !(isSpeakingRef.current && speakingTextRef.current === currentFrameAudioText) || animationErrorRef.current;
-      if (speechNotRunningOrErrorOccurred && !isFlickerAnimationActive) { // only adjust if flicker isn't already active
+      const speechNotRunningOrErrorOccurred = !(isSpeakingRef.current && speakingTextRef.current === currentFrameAudioTextRef.current) || animationErrorRef.current;
+      if (speechNotRunningOrErrorOccurred && !isFlickerAnimationActive) { 
         if (animationErrorRef.current && imagePreviewRef.current) {
           setActiveDisplayFrame(imagePreviewRef.current);
         } else if (animatedFramePreviewRef.current) {
@@ -883,7 +889,7 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                {animationError && !isGeneratingFrame && ( // Show error only when not actively generating
+                {animationError && !isGeneratingFrame && ( 
                   <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5"/>
                     <p>{animationError}</p>
@@ -903,3 +909,4 @@ export default function Home() {
     </div>
   );
 }
+

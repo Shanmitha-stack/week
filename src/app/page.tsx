@@ -560,15 +560,17 @@ export default function Home() {
       toast({ title: "Starting Mock Animation Process", description: "Preprocessing face image (simulated)..." });
       await new Promise(resolve => setTimeout(resolve, 1000)); 
 
-      let animationCreativePrompt = `Generate a single, still image frame of the person in the provided photo, looking as if they are part of a video and speaking. Critically, ensure the entire face is clearly visible and maintain a framing similar to the original input photo. Avoid extreme close-ups of any single feature like the lips.`;
+      let animationCreativePrompt = `Generate a single, still image frame of the person in the provided photo. The person should appear as if they are actively speaking or in the middle of a natural conversation. Critically, ensure the entire face is clearly visible and maintain a framing similar to the original input photo. Avoid extreme close-ups of any single feature.`;
       const audioTextContext = (audioSourceForAnimationLogic === "simulated cloned audio" && textForSimulatedClonedVoice)
         ? textForSimulatedClonedVoice
         : ((audioSourceForAnimationLogic === "prepared speech text" && preparedSpeechText) ? preparedSpeechText : "");
       
       if (audioTextContext) {
-        animationCreativePrompt += ` They might be saying something like: "${audioTextContext.substring(0, 100)}...".`;
+        animationCreativePrompt += ` The person's mouth should be shaped to convincingly represent them speaking the very first few words of the text: "${audioTextContext.substring(0, 30)}...". Aim for a natural expression that would be a good still frame from a lip-synced video. For example, if the text starts with 'Hello world', the mouth might be slightly open, as if forming the 'He' sound.`;
+      } else {
+        animationCreativePrompt += ` Focus on a natural, slightly animated expression, as if they are about to speak or have just finished speaking. The mouth should be slightly open or in a position suggesting recent speech.`;
       }
-      animationCreativePrompt += ` The style should be consistent with the input photo, suitable for a video frame. Do not add text overlays or speech bubbles to the image. Focus on a natural expression.`;
+      animationCreativePrompt += ` The style should be consistent with the input photo, suitable for a video frame. Do not add text overlays or speech bubbles to the image. Ensure good lighting and focus on the face.`;
       
       toast({ title: "Generating Mock Animation Frame", description: "Using AI to create a dynamic placeholder frame..." });
       
@@ -613,7 +615,7 @@ export default function Home() {
                 }
               }
 
-              if (!playedAudio && audioSourceForAnimationLogic) { // Check audioSourceForAnimationLogic to avoid toast if it was null initially
+              if (!playedAudio && audioSourceForAnimationLogic) { 
                 console.log('[handleAnimateFace] Auto-play: Intended audio source for animation was not available at playback time, or no audio source was set.');
               }
             }, 200);
@@ -672,7 +674,7 @@ export default function Home() {
                   placeholder="Type or paste your text here..."
                   rows={4}
                   className="text-base mt-1"
-                  disabled={isAnimatingFace}
+                  disabled={anyLoading}
                 />
               </div>
               <div className="space-y-2">
@@ -686,7 +688,7 @@ export default function Home() {
                   accept="image/*"
                   onChange={handleImageChange} 
                   className="text-base file:text-primary file:font-medium"
-                  disabled={isAnimatingFace}
+                  disabled={anyLoading}
                 />
                 {imagePreview && (
                   <div className="mt-2 border rounded-md p-2 inline-block bg-muted/30">
@@ -744,6 +746,7 @@ export default function Home() {
                   accept="audio/*"
                   onChange={handleVoiceSampleChange} 
                   className="text-base mt-1 file:text-primary file:font-medium"
+                  disabled={anyLoading}
                 />
                  <p className="text-xs text-muted-foreground mt-1 italic">Note: This uploaded sample is for simulation purposes. Playback will use a standard browser voice, not the uploaded sample's voice.</p>
                 {selectedVoiceSample && (
@@ -864,7 +867,7 @@ export default function Home() {
                         console.error('[Next/Image OnError] Error loading src:', target.src, 'Full event:', e);
                         setImageLoadError('Error loading the generated/fallback image. A fallback placeholder is shown.');
                         
-                        if (!mockVideoPlayerImage || !mockVideoPlayerImage.includes('img_load_err=1')) { // Avoid loop if this specific fallback also fails
+                        if (!mockVideoPlayerImage || !mockVideoPlayerImage.includes('img_load_err=1')) { 
                            console.log('[Next/Image OnError] Attempting to set image to forced img_load_err=1 fallback.');
                            setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}&img_load_err=1`);
                         }

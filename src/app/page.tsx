@@ -173,12 +173,9 @@ export default function Home() {
       setIsSpeaking(false);
       setSpeakingText(null);
       setIsSimulatedClonedVoiceSpeaking(false);
-      if (animationIntervalRef.current) {
-        clearInterval(animationIntervalRef.current);
-      }
-      setIsFlickerAnimationActive(false);
+      if (isFlickerAnimationActive) stopFlickerAnimation(); // Added this line
     };
-  }, []);
+  }, [isFlickerAnimationActive, stopFlickerAnimation]); // Added dependencies
   
 
   const resetOutputsDependentOnTextOrImage = useCallback(() => {
@@ -601,7 +598,7 @@ export default function Home() {
 
     try {
       const textSnippet = textToSpeakForFrame.substring(0, 150); 
-      const animationPrompt = `Generate a single, highly expressive keyframe image of the person from the photo. This image should clearly show them in the act of speaking the very beginning of the text: "${textSnippet}". Focus on visible facial animation: ensure the mouth shape (viseme) precisely matches the initial phonemes of the text, and the eyes and overall facial expression vividly convey the act of speaking and the appropriate emotion. The image should look like a dynamic snapshot from an animation, capturing clear facial movement. The primary output of this request MUST be the generated image.`;
+      const animationPrompt = `Your primary task is to transform the provided static photo into a single, highly expressive keyframe image. This new image must depict the person as if they are frozen mid-sentence, actively speaking the initial words of this text: "${textSnippet}". CRITICALLY, the generated image needs to show *clear visual changes* from the original photo, especially in the mouth shape (viseme) to precisely match the first phonemes of the text, and in the eye expression to convey engagement in speech. The overall facial expression should be dynamic and appropriate for the act of speaking these initial words. The output MUST be the generated image.`;
       
       const result: GenerateAnimatedFrameOutput = await generateAnimatedFrame({
           originalImageDataUri: imagePreviewRef.current,
@@ -920,3 +917,4 @@ export default function Home() {
     </div>
   );
 }
+

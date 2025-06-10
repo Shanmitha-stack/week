@@ -10,9 +10,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, SparklesIcon, Video } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Video } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
-import { generateAnimatedFrame } from '@/ai/flows/generate-animated-frame-flow';
+// generateAnimatedFrame is no longer used in the simplified third section
+// import { generateAnimatedFrame } from '@/ai/flows/generate-animated-frame-flow';
 
 
 export default function Home() {
@@ -33,10 +34,8 @@ export default function Home() {
 
   const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
 
-  // States for the third section: AI Poster & Mock Video
-  const [isGeneratingAIPoster, setIsGeneratingAIPoster] = useState<boolean>(false);
+  // States for the third section: Mock Video with Original Image Poster
   const [isFetchingVideo, setIsFetchingVideo] = useState<boolean>(false);
-  const [aiPosterUrl, setAiPosterUrl] = useState<string | null>(null);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
   const [videoSectionError, setVideoSectionError] = useState<string | null>(null);
   
@@ -53,7 +52,6 @@ export default function Home() {
   useEffect(() => {
     imagePreviewRef.current = imagePreview;
     if (!imagePreview) { 
-      setAiPosterUrl(null);
       setFinalVideoUrl(null);
       setVideoSectionError(null);
     }
@@ -118,7 +116,6 @@ export default function Home() {
     setPreparedSpeechText(null);
     setTextForSimulatedClonedVoice(null); 
     
-    setAiPosterUrl(null);
     setFinalVideoUrl(null);
     setVideoSectionError(null);
 
@@ -179,7 +176,6 @@ export default function Home() {
     setIsGeneratingSpeech(true);
     setPreparedSpeechText(null); 
     setTextForSimulatedClonedVoice(null);
-    setAiPosterUrl(null);
     setFinalVideoUrl(null);
     setVideoSectionError(null);
 
@@ -332,7 +328,6 @@ export default function Home() {
     else setSelectedVoiceSample(null);
     
     setTextForSimulatedClonedVoice(null);
-    setAiPosterUrl(null);
     setFinalVideoUrl(null);
     setVideoSectionError(null);
 
@@ -376,7 +371,6 @@ export default function Home() {
     setIsSpeaking(false);
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
-    setAiPosterUrl(null);
     setFinalVideoUrl(null);
     setVideoSectionError(null);
     
@@ -473,7 +467,7 @@ export default function Home() {
 
   }, [isSpeechSupported, toast]);
 
-  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingAIPoster || isFetchingVideo;
+  const anyLoading = isGeneratingSpeech || isCloningVoice || isFetchingVideo;
   
   const isUsablePreparedTextAvailable = () => 
     preparedSpeechTextRef.current && 
@@ -487,7 +481,7 @@ export default function Home() {
   const isTextAvailableForVideoSection = isUsablePreparedTextAvailable() || isUsableClonedTextAvailable();
 
 
-  const handleGenerateAIPosterAndPlayVideo = async () => {
+  const handleGenerateMockVideo = async () => {
     let textToSpeakForVideo: string | null = null;
     if (isUsableClonedTextAvailable() && textForSimulatedClonedVoiceRef.current) {
       textToSpeakForVideo = textForSimulatedClonedVoiceRef.current;
@@ -511,33 +505,14 @@ export default function Home() {
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false); 
     
-    setIsGeneratingAIPoster(true);
-    setIsFetchingVideo(false); // Reset this state
-    setAiPosterUrl(null);
+    setIsFetchingVideo(true);
     setFinalVideoUrl(null);
     setVideoSectionError(null);
-    toast({ title: "Generating AI Poster...", description: "AI is creating a speaking version of your image..." });
+    toast({ title: "Fetching Mock Video...", description: "Requesting video from the mock backend..." });
 
     try {
-      const textSnippet = textToSpeakForVideo.substring(0, 150);
-      const animationPrompt = `Your task is to generate a single, expressive keyframe image of the person in the provided photo. This keyframe should depict them frozen mid-speech, as if they are just starting to speak the given text. CRITICAL: The mouth shape (viseme) and overall facial expression MUST precisely match the very first sounds/phonemes of the text: "${textSnippet}". The expression should also convey the appropriate emotion for this initial part of the text. Make it look like a high-quality animation cel ready for a speaking scene.`;
-      
-      const aiFrameResult = await generateAnimatedFrame({
-        originalImageDataUri: imagePreviewRef.current,
-        animationPrompt: animationPrompt,
-      });
-
-      if (aiFrameResult.errorMessage || !aiFrameResult.generatedFrameDataUri) {
-        throw new Error(aiFrameResult.errorMessage || "AI frame generation failed to return an image.");
-      }
-      setAiPosterUrl(aiFrameResult.generatedFrameDataUri);
-      toast({ title: "AI Poster Generated!", description: "Now fetching mock video..." });
-      setIsGeneratingAIPoster(false);
-      setIsFetchingVideo(true);
-
-      // Now fetch the mock video
       const formData = new FormData();
-      formData.append('image', selectedImage); // Still send original image to backend
+      formData.append('image', selectedImage); 
       formData.append('textToSpeak', textToSpeakForVideo);
 
       const response = await fetch('/api/true-lip-sync-video', {
@@ -557,25 +532,23 @@ export default function Home() {
       const videoResult = await response.json();
       if (videoResult.videoUrl) {
         setFinalVideoUrl(videoResult.videoUrl);
-        toast({ title: "Video Ready (Mock)", description: "Placeholder video loaded with AI poster.", duration: 3000 });
+        toast({ title: "Video Ready (Mock)", description: "Placeholder video loaded. Your uploaded image is its poster.", duration: 3000 });
       } else {
         throw new Error("Video URL not found in backend response.");
       }
 
     } catch (error: any) {
-      console.error('[VideoGenerationWithAIPoster] Error:', error);
+      console.error('[GenerateMockVideo] Error:', error);
       const message = error.message || "An unexpected error occurred.";
       setVideoSectionError(message);
       toast({ title: "Error in Video Section", description: message, variant: "destructive" });
     } finally {
-      setIsGeneratingAIPoster(false);
       setIsFetchingVideo(false);
     }
   };
   
   const currentPreparedTextIsSpeaking = isSpeaking && preparedSpeechText && speakingText === preparedSpeechText;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoice;
-  const videoSectionIsLoading = isGeneratingAIPoster || isFetchingVideo;
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -706,33 +679,31 @@ export default function Home() {
             </div>
           </SectionCard>
 
-          <SectionCard title="AI-Enhanced Poster & Mock Video" icon={<SparklesIcon className="text-primary" />}>
+          <SectionCard title="Video Output (Original Image Poster)" icon={<Video className="text-primary" />}>
             <div className="space-y-4">
                <div>
-                <Label htmlFor="video-source-info-ai" className="text-base">Image &amp; Audio Source for Video:</Label>
+                <Label htmlFor="video-source-info-original" className="text-base">Image &amp; Audio Source for Video:</Label>
                  {imagePreview ? (
-                    <p className="text-sm text-muted-foreground mt-1" id="video-source-info-ai">
-                      Using image uploaded in "Text & Image to Speech Preparation" and audio from either "Prepared Text" or "Mock Cloned Audio".
-                      The AI will generate a "speaking" version of your image to use as a poster for the video.
+                    <p className="text-sm text-muted-foreground mt-1" id="video-source-info-original">
+                      Using your uploaded image as the poster. Audio will be from "Prepared Text" or "Mock Cloned Audio".
+                      A generic placeholder video will be played from a mock backend.
                     </p>
                   ) : (
-                    <p className="text-sm text-muted-foreground mt-1" id="video-source-info-ai">
+                    <p className="text-sm text-muted-foreground mt-1" id="video-source-info-original">
                       Please upload an image and prepare audio text in the sections above.
                     </p>
                   )}
               </div>
 
               <Button
-                onClick={handleGenerateAIPosterAndPlayVideo}
+                onClick={handleGenerateMockVideo}
                 disabled={anyLoading || !selectedImage || !isTextAvailableForVideoSection}
                 className="w-full sm:w-auto"
               >
-                {isGeneratingAIPoster ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating AI Poster...</>
-                ) : isFetchingVideo ? (
+                {isFetchingVideo ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching Video...</>
                 ) : (
-                  <><Video className="mr-2 h-4 w-4" />Generate AI Poster & Play Mock Video</>
+                  <><Video className="mr-2 h-4 w-4" />Generate Mock Video</>
                 )}
               </Button>
               
@@ -746,30 +717,18 @@ export default function Home() {
                      <video
                         key={finalVideoUrl} 
                         src={finalVideoUrl}
-                        poster={aiPosterUrl || imagePreview || undefined} 
+                        poster={imagePreview || undefined} 
                         controls
                         autoPlay
                         className="w-full h-full object-contain rounded-md bg-black"
                         data-ai-hint="generated video"
                     />
-                  ) : videoSectionIsLoading ? (
+                  ) : isFetchingVideo ? (
                     <div className="flex flex-col items-center justify-center text-center p-4">
                       <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-                      <p className="text-lg font-semibold text-white">
-                        {isGeneratingAIPoster ? "Generating AI Poster..." : "Fetching Video..."}
-                      </p>
-                      {isGeneratingAIPoster && <p className="text-sm text-gray-300">AI is creating a speaking version of your image.</p>}
-                      {isFetchingVideo && <p className="text-sm text-gray-300">Mock backend is preparing video.</p>}
+                      <p className="text-lg font-semibold text-white">Fetching Video...</p>
+                      <p className="text-sm text-gray-300">Mock backend is preparing video.</p>
                     </div>
-                  ) : aiPosterUrl ? ( 
-                     <Image
-                        src={aiPosterUrl}
-                        alt="AI Generated Poster"
-                        fill
-                        style={{ objectFit: 'contain' }}
-                        className="rounded-md bg-black"
-                        data-ai-hint="ai generated poster"
-                    />
                   ) : imagePreview ? ( 
                      <Image
                         src={imagePreview}
@@ -783,19 +742,19 @@ export default function Home() {
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
                        <Video className="h-12 w-12 mb-4 text-muted-foreground/50" data-ai-hint="video placeholder" />
                       <p className="text-lg font-semibold">Video will appear here</p>
-                      <p className="text-sm">Upload an image, prepare audio, then click "Generate AI Poster & Play Mock Video".</p>
+                      <p className="text-sm">Upload an image, prepare audio, then click "Generate Mock Video".</p>
                     </div>
                   )}
                 </div>
-                {videoSectionError && !videoSectionIsLoading && (
+                {videoSectionError && !isFetchingVideo && (
                   <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5"/>
                     <p>{videoSectionError}</p>
                   </div>
                 )}
                  <p className="text-xs text-muted-foreground mt-2 italic">
-                    Note: This feature first uses AI to generate an expressive "speaking" version of your uploaded image, which is then used as a poster.
-                    Afterward, a generic placeholder video is played from a mock backend. The continuous video itself is not dynamically generated from your image.
+                    Note: Your original uploaded image is used as the poster.
+                    A generic placeholder video is played from a mock backend. The video content itself is not dynamically generated from your image.
                   </p>
               </div>
             </div>
@@ -809,3 +768,4 @@ export default function Home() {
   );
 }
 
+    

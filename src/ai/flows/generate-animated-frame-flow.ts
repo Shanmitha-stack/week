@@ -2,8 +2,9 @@
 'use server';
 /**
  * @fileOverview Generates a mock "animated" frame from an input image using AI,
- * aiming for natural and expressive speaking animations.
- * This is intended for UI demonstration purposes and does not perform actual video animation or lip-sync.
+ * aiming for natural and expressive speaking animations with attention to lip synchronization
+ * with the initial part of the provided text.
+ * This is intended for UI demonstration purposes and does not perform actual video animation or true lip-sync.
  *
  * - generateAnimatedFrame - A function that takes an image and a prompt to generate a new image.
  * - GenerateAnimatedFrameInput - The input type.
@@ -22,7 +23,7 @@ const GenerateAnimatedFrameInputSchema = z.object({
   animationPrompt: z
     .string()
     .describe(
-      'A text prompt to guide the AI in generating a new image frame. The prompt should encourage the AI to create a natural, clear, and expressive facial animation that conveys appropriate emotion for the provided text, as if it\'s a keyframe from an animated video. E.g., "Generate an image of this person speaking with a joyful expression, emphasizing the emotion in their face, like a frame from a video."'
+      'A text prompt to guide the AI in generating a new image frame. The prompt should encourage the AI to create a natural, clear, and expressive facial animation that conveys appropriate emotion for the provided text. It should specifically focus on a mouth shape and facial expression that corresponds to the initial sounds of the text, making the lips appear synchronized with the beginning of the speech, as if it\'s a keyframe from an animated video. E.g., "Generate an image of this person as if they are in the middle of speaking the following text. Focus on a natural mouth shape and facial expression that clearly corresponds to the initial sounds of this text, making the lips appear synchronized with the beginning of the speech. Convey appropriate emotion. Imagine this is a keyframe from an animated video. Text: [text snippet]"'
     ),
 });
 export type GenerateAnimatedFrameInput = z.infer<typeof GenerateAnimatedFrameInputSchema>;

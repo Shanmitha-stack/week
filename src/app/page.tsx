@@ -565,7 +565,7 @@ export default function Home() {
 
     try {
       const textSnippet = textToSpeakForAnimation.substring(0, 150);
-      const animationPrompt = `Generate an image of this person speaking the following text with clear, natural, and expressive facial animation, conveying appropriate emotion for the text. Imagine this is a keyframe from an animated video. Text: "${textSnippet}"`;
+      const animationPrompt = `Generate an image of this person as if they are in the middle of speaking the following text. Focus on a natural mouth shape and facial expression that clearly corresponds to the initial sounds of this text, making the lips appear synchronized with the beginning of the speech. Convey appropriate emotion. Imagine this is a keyframe from an animated video. Text: "${textSnippet}"`;
       
       const { generatedFrameDataUri, errorMessage } = await generateAnimatedFrame({
         originalImageDataUri: imagePreviewRef.current,

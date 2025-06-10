@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, SparklesIcon, Video } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
-// import { generateAnimatedFrame } from '@/ai/flows/generate-animated-frame-flow'; // No longer used for the third section directly
+import { generateAnimatedFrame } from '@/ai/flows/generate-animated-frame-flow';
 
 
 export default function Home() {
@@ -33,10 +33,12 @@ export default function Home() {
 
   const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
 
-  // States for the third section: Lip-Sync Video Output (Backend Mock)
-  const [isGeneratingVideo, setIsGeneratingVideo] = useState<boolean>(false);
-  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
-  const [videoGenerationError, setVideoGenerationError] = useState<string | null>(null);
+  // States for the third section: AI Poster & Mock Video
+  const [isGeneratingAIPoster, setIsGeneratingAIPoster] = useState<boolean>(false);
+  const [isFetchingVideo, setIsFetchingVideo] = useState<boolean>(false);
+  const [aiPosterUrl, setAiPosterUrl] = useState<string | null>(null);
+  const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
+  const [videoSectionError, setVideoSectionError] = useState<string | null>(null);
   
   const { toast } = useToast();
 
@@ -51,9 +53,9 @@ export default function Home() {
   useEffect(() => {
     imagePreviewRef.current = imagePreview;
     if (!imagePreview) { 
-      // When image is removed, reset outputs that depend on it for the video section
-      setGeneratedVideoUrl(null);
-      setVideoGenerationError(null);
+      setAiPosterUrl(null);
+      setFinalVideoUrl(null);
+      setVideoSectionError(null);
     }
   }, [imagePreview]);
 
@@ -116,9 +118,9 @@ export default function Home() {
     setPreparedSpeechText(null);
     setTextForSimulatedClonedVoice(null); 
     
-    // Reset video section outputs
-    setGeneratedVideoUrl(null);
-    setVideoGenerationError(null);
+    setAiPosterUrl(null);
+    setFinalVideoUrl(null);
+    setVideoSectionError(null);
 
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
@@ -177,8 +179,9 @@ export default function Home() {
     setIsGeneratingSpeech(true);
     setPreparedSpeechText(null); 
     setTextForSimulatedClonedVoice(null);
-    setGeneratedVideoUrl(null); // Clear previous video if generating new speech text
-    setVideoGenerationError(null);
+    setAiPosterUrl(null);
+    setFinalVideoUrl(null);
+    setVideoSectionError(null);
 
 
     let imageDataUri: string | undefined = undefined;
@@ -329,8 +332,9 @@ export default function Home() {
     else setSelectedVoiceSample(null);
     
     setTextForSimulatedClonedVoice(null);
-    setGeneratedVideoUrl(null); // Clear video if voice sample changes
-    setVideoGenerationError(null);
+    setAiPosterUrl(null);
+    setFinalVideoUrl(null);
+    setVideoSectionError(null);
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
         window.speechSynthesis.cancel();
@@ -372,8 +376,9 @@ export default function Home() {
     setIsSpeaking(false);
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
-    setGeneratedVideoUrl(null); // Clear video if starting cloning
-    setVideoGenerationError(null);
+    setAiPosterUrl(null);
+    setFinalVideoUrl(null);
+    setVideoSectionError(null);
     
     setTextForSimulatedClonedVoice(null); 
     
@@ -468,7 +473,7 @@ export default function Home() {
 
   }, [isSpeechSupported, toast]);
 
-  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingVideo;
+  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingAIPoster || isFetchingVideo;
   
   const isUsablePreparedTextAvailable = () => 
     preparedSpeechTextRef.current && 
@@ -479,10 +484,10 @@ export default function Home() {
   const isUsableClonedTextAvailable = () =>
     textForSimulatedClonedVoiceRef.current && textForSimulatedClonedVoiceRef.current.trim() !== "";
 
-  const isTextAvailableForVideo = isUsablePreparedTextAvailable() || isUsableClonedTextAvailable();
+  const isTextAvailableForVideoSection = isUsablePreparedTextAvailable() || isUsableClonedTextAvailable();
 
 
-  const handleGenerateVideo = async () => {
+  const handleGenerateAIPosterAndPlayVideo = async () => {
     let textToSpeakForVideo: string | null = null;
     if (isUsableClonedTextAvailable() && textForSimulatedClonedVoiceRef.current) {
       textToSpeakForVideo = textForSimulatedClonedVoiceRef.current;
@@ -495,11 +500,10 @@ export default function Home() {
       return;
     }
     if (!textToSpeakForVideo) {
-      toast({ title: "Audio Text Required", description: "Please use 'Process Input for Speech' or 'Generate Speech with Cloned Voice (Mock)' first to prepare text for video generation.", variant: "destructive" });
+      toast({ title: "Audio Text Required", description: "Please use 'Process Input for Speech' or 'Generate Speech with Cloned Voice (Mock)' first.", variant: "destructive" });
       return;
     }
 
-    // Stop any ongoing browser speech synthesis from other sections
     if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
       window.speechSynthesis.cancel();
     }
@@ -507,49 +511,71 @@ export default function Home() {
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false); 
     
-    setIsGeneratingVideo(true);
-    setGeneratedVideoUrl(null);
-    setVideoGenerationError(null);
-    toast({ title: "Generating Lip-Sync Video...", description: "Calling mock backend service..." });
-
-    const formData = new FormData();
-    formData.append('image', selectedImage);
-    formData.append('textToSpeak', textToSpeakForVideo);
+    setIsGeneratingAIPoster(true);
+    setIsFetchingVideo(false); // Reset this state
+    setAiPosterUrl(null);
+    setFinalVideoUrl(null);
+    setVideoSectionError(null);
+    toast({ title: "Generating AI Poster...", description: "AI is creating a speaking version of your image..." });
 
     try {
+      const textSnippet = textToSpeakForVideo.substring(0, 150);
+      const animationPrompt = `Generate an image of this person as if they are in the middle of speaking the following text. Focus on a natural mouth shape and facial expression that clearly corresponds to the initial sounds of this text, making the lips appear synchronized with the beginning of the speech. Convey appropriate emotion. Imagine this is a keyframe from an animated video. Text: "${textSnippet}"`;
+      
+      const aiFrameResult = await generateAnimatedFrame({
+        originalImageDataUri: imagePreviewRef.current,
+        animationPrompt: animationPrompt,
+      });
+
+      if (aiFrameResult.errorMessage || !aiFrameResult.generatedFrameDataUri) {
+        throw new Error(aiFrameResult.errorMessage || "AI frame generation failed to return an image.");
+      }
+      setAiPosterUrl(aiFrameResult.generatedFrameDataUri);
+      toast({ title: "AI Poster Generated!", description: "Now fetching mock video..." });
+      setIsGeneratingAIPoster(false);
+      setIsFetchingVideo(true);
+
+      // Now fetch the mock video
+      const formData = new FormData();
+      formData.append('image', selectedImage); // Still send original image to backend
+      formData.append('textToSpeak', textToSpeakForVideo);
+
       const response = await fetch('/api/true-lip-sync-video', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        let errorDetails = "Placeholder backend returned an error.";
+        let errorDetails = "Placeholder backend returned an error for video.";
         try {
           const errorData = await response.json();
           errorDetails = errorData.message || errorData.error || errorDetails;
         } catch (e) { /* Ignore if error response is not JSON */ }
-        throw new Error(`Failed to generate video. Status: ${response.status}. ${errorDetails}`);
+        throw new Error(`Failed to fetch video. Status: ${response.status}. ${errorDetails}`);
       }
 
-      const result = await response.json();
-      if (result.videoUrl) {
-        setGeneratedVideoUrl(result.videoUrl);
-        toast({ title: "Video Ready (Mock)", description: "Placeholder video loaded.", duration: 3000 });
+      const videoResult = await response.json();
+      if (videoResult.videoUrl) {
+        setFinalVideoUrl(videoResult.videoUrl);
+        toast({ title: "Video Ready (Mock)", description: "Placeholder video loaded with AI poster.", duration: 3000 });
       } else {
         throw new Error("Video URL not found in backend response.");
       }
+
     } catch (error: any) {
-      console.error('[VideoGeneration] Error:', error);
-      const message = error.message || "An unexpected error occurred during video generation.";
-      setVideoGenerationError(message);
-      toast({ title: "Video Generation Error", description: message, variant: "destructive" });
+      console.error('[VideoGenerationWithAIPoster] Error:', error);
+      const message = error.message || "An unexpected error occurred.";
+      setVideoSectionError(message);
+      toast({ title: "Error in Video Section", description: message, variant: "destructive" });
     } finally {
-      setIsGeneratingVideo(false);
+      setIsGeneratingAIPoster(false);
+      setIsFetchingVideo(false);
     }
   };
   
   const currentPreparedTextIsSpeaking = isSpeaking && preparedSpeechText && speakingText === preparedSpeechText;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoice;
+  const videoSectionIsLoading = isGeneratingAIPoster || isFetchingVideo;
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -587,8 +613,8 @@ export default function Home() {
                   className="text-base file:text-primary file:font-medium"
                   disabled={anyLoading}
                 />
-                {imagePreview && ( // Show original image preview if no video is playing
-                  <div className={`mt-2 border rounded-md p-2 inline-block bg-muted/30 ${generatedVideoUrl ? 'hidden' : ''}`}>
+                {imagePreview && !finalVideoUrl && ( 
+                  <div className={`mt-2 border rounded-md p-2 inline-block bg-muted/30`}>
                     <Image
                       src={imagePreview}
                       alt="Selected image preview"
@@ -680,30 +706,33 @@ export default function Home() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Lip-Sync Video Output (Backend Mock)" icon={<Video className="text-primary" />} >
+          <SectionCard title="AI-Enhanced Poster & Mock Video" icon={<SparklesIcon className="text-primary" />}>
             <div className="space-y-4">
                <div>
-                <Label htmlFor="video-source-info" className="text-base">Image &amp; Audio Source for Video:</Label>
+                <Label htmlFor="video-source-info-ai" className="text-base">Image &amp; Audio Source for Video:</Label>
                  {imagePreview ? (
-                    <p className="text-sm text-muted-foreground mt-1" id="video-source-info">
+                    <p className="text-sm text-muted-foreground mt-1" id="video-source-info-ai">
                       Using image uploaded in "Text & Image to Speech Preparation" and audio from either "Prepared Text" or "Mock Cloned Audio".
+                      The AI will generate a "speaking" version of your image to use as a poster for the video.
                     </p>
                   ) : (
-                    <p className="text-sm text-muted-foreground mt-1" id="video-source-info">
+                    <p className="text-sm text-muted-foreground mt-1" id="video-source-info-ai">
                       Please upload an image and prepare audio text in the sections above.
                     </p>
                   )}
               </div>
 
               <Button
-                onClick={handleGenerateVideo}
-                disabled={anyLoading || !selectedImage || !isTextAvailableForVideo}
+                onClick={handleGenerateAIPosterAndPlayVideo}
+                disabled={anyLoading || !selectedImage || !isTextAvailableForVideoSection}
                 className="w-full sm:w-auto"
               >
-                {isGeneratingVideo ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating Video...</>
+                {isGeneratingAIPoster ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating AI Poster...</>
+                ) : isFetchingVideo ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching Video...</>
                 ) : (
-                  <><Video className="mr-2 h-4 w-4" />Generate Lip-Sync Video (Backend)</>
+                  <><Video className="mr-2 h-4 w-4" />Generate AI Poster & Play Mock Video</>
                 )}
               </Button>
               
@@ -713,30 +742,45 @@ export default function Home() {
                   Video Output:
                 </Label>
                 <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden min-h-[200px] relative">
-                  {isGeneratingVideo && !generatedVideoUrl ? (
+                  {videoSectionIsLoading && !finalVideoUrl ? (
                     <div className="flex flex-col items-center justify-center text-center p-4">
                       <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-                      <p className="text-lg font-semibold text-white">Generating Video...</p>
-                      <p className="text-sm text-gray-300">Mock backend is processing.</p>
+                      <p className="text-lg font-semibold text-white">
+                        {isGeneratingAIPoster ? "Generating AI Poster..." : "Fetching Video..."}
+                      </p>
+                      {isGeneratingAIPoster && <p className="text-sm text-gray-300">AI is creating a speaking version of your image.</p>}
+                      {isFetchingVideo && <p className="text-sm text-gray-300">Mock backend is preparing video.</p>}
+                      {(isGeneratingAIPoster || isFetchingVideo) && imagePreview && !aiPosterUrl && (
+                         <Image
+                            src={imagePreview}
+                            alt="Original image during processing"
+                            width={100}
+                            height={100}
+                            className="rounded-md object-contain mt-2 opacity-50"
+                            data-ai-hint="original image"
+                        />
+                      )}
                     </div>
-                  ) : generatedVideoUrl ? (
+                  ) : finalVideoUrl ? (
                      <video
-                        key={generatedVideoUrl} 
-                        src={generatedVideoUrl}
-                        poster={imagePreview || undefined} // Use uploaded image as poster
+                        key={finalVideoUrl} 
+                        src={finalVideoUrl}
+                        poster={aiPosterUrl || imagePreview || undefined} 
                         controls
                         autoPlay
                         className="w-full h-full object-contain rounded-md bg-black"
-                        onPlay={() => console.log("Video started playing")}
-                        onEnded={() => console.log("Video finished")}
-                        onError={(e) => {
-                            console.error("Video player error:", e);
-                            setVideoGenerationError("Error playing the generated video. The URL might be invalid or the video format unsupported.");
-                            toast({title: "Video Playback Error", description: "Could not play the video. It might be invalid or unsupported by your browser.", variant: "destructive"});
-                        }}
                         data-ai-hint="generated video"
                     />
-                  ) : imagePreview ? (
+                  ) : aiPosterUrl ? ( // AI Poster generated, but video not yet (or failed)
+                     <Image
+                        src={aiPosterUrl}
+                        alt="AI Generated Poster"
+                        fill
+                        style={{ objectFit: 'contain' }}
+                        className="rounded-md bg-black"
+                        data-ai-hint="ai generated poster"
+                    />
+                  ) : imagePreview ? ( // Original image before anything is generated
                      <Image
                         src={imagePreview}
                         alt="Uploaded image placeholder for video"
@@ -745,22 +789,23 @@ export default function Home() {
                         className="rounded-md bg-black"
                         data-ai-hint="original uploaded video poster"
                     />
-                  ) : (
+                  ) : ( // Default placeholder if no image uploaded
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
                        <Video className="h-12 w-12 mb-4 text-muted-foreground/50" data-ai-hint="video placeholder" />
                       <p className="text-lg font-semibold">Video will appear here</p>
-                      <p className="text-sm">Upload an image, prepare audio, then click "Generate Lip-Sync Video".</p>
+                      <p className="text-sm">Upload an image, prepare audio, then click "Generate AI Poster & Play Mock Video".</p>
                     </div>
                   )}
                 </div>
-                {videoGenerationError && !isGeneratingVideo && (
+                {videoSectionError && !videoSectionIsLoading && (
                   <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5"/>
-                    <p>{videoGenerationError}</p>
+                    <p>{videoSectionError}</p>
                   </div>
                 )}
                  <p className="text-xs text-muted-foreground mt-2 italic">
-                    Note: This feature simulates a backend video generation process. The video played is a generic placeholder from a mock backend. Your uploaded image is used as the initial poster frame for the video player.
+                    Note: This feature first uses AI to generate an expressive "speaking" version of your uploaded image, which is then used as a poster.
+                    Afterward, a generic placeholder video is played from a mock backend. The continuous video itself is not dynamically generated from your image.
                   </p>
               </div>
             </div>

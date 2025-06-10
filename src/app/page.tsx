@@ -54,7 +54,6 @@ export default function Home() {
   const animationErrorRef = useRef(animationError);
   const currentFrameAudioTextRef = useRef(currentFrameAudioText);
 
-
   const stopFlickerAnimation = useCallback(() => {
     if (animationIntervalRef.current) {
       clearInterval(animationIntervalRef.current);
@@ -601,7 +600,7 @@ export default function Home() {
 
     try {
       const textSnippet = textToSpeakForFrame.substring(0, 150); 
-      const animationPrompt = `Generate a single, highly expressive keyframe image of the person from the photo. This image should clearly show them in the act of speaking the very beginning of the text: "${textSnippet}". Focus on visible facial animation: ensure the mouth shape (viseme) precisely matches the initial phonemes of the text, and the eyes and overall facial expression vividly convey the act of speaking and the appropriate emotion. The image should look like a dynamic snapshot from an animation, capturing clear facial movement.`;
+      const animationPrompt = `Generate a single, highly expressive keyframe image of the person from the photo. This image should clearly show them in the act of speaking the very beginning of the text: "${textSnippet}". Focus on visible facial animation: ensure the mouth shape (viseme) precisely matches the initial phonemes of the text, and the eyes and overall facial expression vividly convey the act of speaking and the appropriate emotion. The image should look like a dynamic snapshot from an animation, capturing clear facial movement. The primary output of this request MUST be the generated image.`;
       
       const result: GenerateAnimatedFrameOutput = await generateAnimatedFrame({
           originalImageDataUri: imagePreviewRef.current,
@@ -613,7 +612,7 @@ export default function Home() {
 
       if (flowErrorMessage) {
         if (flowErrorType === 'AI_DID_NOT_RETURN_IMAGE') {
-            console.warn('[GenerateAnimatedFrame] Info: AI model did not return an image.', flowErrorMessage);
+            console.warn('[GenerateAnimatedFrame] AI Flow Info:', flowErrorMessage);
             toast({ title: "AI Image Issue", description: flowErrorMessage, variant: "default" });
         } else { 
             console.error('[GenerateAnimatedFrame] AI Flow Error:', flowErrorMessage);

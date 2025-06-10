@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Film, Sparkles as AiSparkles } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Sparkles } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame } from '@/ai/flows/generate-animated-frame-flow';
 
@@ -33,13 +33,9 @@ export default function Home() {
 
   const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
 
-  // States for the third section: AI Animated Frame & Speech (Mock)
   const [isGeneratingFrame, setIsGeneratingFrame] = useState<boolean>(false);
   const [animatedFramePreview, setAnimatedFramePreview] = useState<string | null>(null);
   const [animationError, setAnimationError] = useState<string | null>(null);
-  const [activeDisplayFrame, setActiveDisplayFrame] = useState<'original' | 'animated' | null>(null);
-  const animationIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [isFlickerAnimationActive, setIsFlickerAnimationActive] = useState<boolean>(false); // Tracks if flicker is running
   const [currentFrameAudioText, setCurrentFrameAudioText] = useState<string | null>(null);
 
 
@@ -51,7 +47,6 @@ export default function Home() {
   const textForSimulatedClonedVoiceRef = useRef(textForSimulatedClonedVoice);
   const speakingTextRef = useRef(speakingText);
   const imagePreviewRef = useRef<string | null>(null);
-  const animatedFramePreviewRef = useRef<string | null>(null);
 
 
   useEffect(() => {
@@ -59,15 +54,9 @@ export default function Home() {
     if (!imagePreview) { 
       setAnimatedFramePreview(null);
       setAnimationError(null);
-      if (isFlickerAnimationActive) stopFlickerAnimation(); // Check if flicker is active before stopping
-      setActiveDisplayFrame(null);
+      setCurrentFrameAudioText(null);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imagePreview, isFlickerAnimationActive]); // Added isFlickerAnimationActive to deps
-
-  useEffect(() => {
-    animatedFramePreviewRef.current = animatedFramePreview;
-  }, [animatedFramePreview]);
+  }, [imagePreview]);
 
 
   useEffect(() => {
@@ -121,32 +110,9 @@ export default function Home() {
       setIsSpeaking(false);
       setSpeakingText(null);
       setIsSimulatedClonedVoiceSpeaking(false);
-      if (animationIntervalRef.current) { // Clear interval on unmount
-        clearInterval(animationIntervalRef.current);
-      }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
-  const stopFlickerAnimation = useCallback(() => {
-    if (animationIntervalRef.current) {
-      clearInterval(animationIntervalRef.current);
-      animationIntervalRef.current = null;
-    }
-    setIsFlickerAnimationActive(false);
-    // Settle on the animated frame if available, otherwise original, or nothing.
-    if (animatedFramePreviewRef.current) {
-        setActiveDisplayFrame('animated');
-        console.log("Flicker animation stopped. Settled on: animated");
-    } else if (imagePreviewRef.current) {
-        setActiveDisplayFrame('original');
-        console.log("Flicker animation stopped. Settled on: original");
-    } else {
-        setActiveDisplayFrame(null);
-        console.log("Flicker animation stopped. Settled on: null");
-    }
-  }, []);
-
 
   const resetOutputsDependentOnTextOrImage = useCallback(() => {
     setPreparedSpeechText(null);
@@ -154,8 +120,6 @@ export default function Home() {
     
     setAnimatedFramePreview(null);
     setAnimationError(null);
-    if (isFlickerAnimationActive) stopFlickerAnimation();
-    setActiveDisplayFrame(null);
     setCurrentFrameAudioText(null);
 
 
@@ -165,7 +129,7 @@ export default function Home() {
     setIsSpeaking(false);
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
-  }, [stopFlickerAnimation, isFlickerAnimationActive]);
+  }, []);
 
 
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -176,20 +140,17 @@ export default function Home() {
       reader.onloadend = () => {
         const result = reader.result as string;
         setImagePreview(result);
-        setActiveDisplayFrame('original'); 
       };
       reader.onerror = () => {
         console.error("FileReader error when trying to load image.");
         setSelectedImage(null); 
         setImagePreview(null);
-        setActiveDisplayFrame(null);
         toast({ title: "Image Load Error", description: "Could not read the selected image file.", variant: "destructive" });
       }
       reader.readAsDataURL(file);
     } else {
       setSelectedImage(null);
       setImagePreview(null);
-      setActiveDisplayFrame(null);
     }
     resetOutputsDependentOnTextOrImage();
   };
@@ -214,16 +175,14 @@ export default function Home() {
     setIsSpeaking(false); 
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false); 
-    if (isFlickerAnimationActive) stopFlickerAnimation();
-    if (animatedFramePreviewRef.current) setActiveDisplayFrame('animated');
-    else if (imagePreviewRef.current) setActiveDisplayFrame('original');
+    
+    setAnimatedFramePreview(null); 
+    setAnimationError(null);
 
 
     setIsGeneratingSpeech(true);
     setPreparedSpeechText(null); 
     setTextForSimulatedClonedVoice(null);
-    setAnimatedFramePreview(null); 
-    setAnimationError(null);
     setCurrentFrameAudioText(null);
 
 
@@ -376,8 +335,6 @@ export default function Home() {
     setTextForSimulatedClonedVoice(null);
     setAnimatedFramePreview(null); 
     setAnimationError(null);
-    if (isFlickerAnimationActive) stopFlickerAnimation();
-    if (imagePreviewRef.current) setActiveDisplayFrame('original');
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
         window.speechSynthesis.cancel();
@@ -419,9 +376,6 @@ export default function Home() {
     setIsSpeaking(false);
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
-    if (isFlickerAnimationActive) stopFlickerAnimation(); 
-    if (animatedFramePreviewRef.current) setActiveDisplayFrame('animated');
-    else if (imagePreviewRef.current) setActiveDisplayFrame('original');
     
     setTextForSimulatedClonedVoice(null); 
     
@@ -530,25 +484,19 @@ export default function Home() {
   const currentAnimatedFrameTextIsSpeaking = isSpeaking && currentFrameAudioText && speakingText === currentFrameAudioText;
 
   const handleGenerateAnimatedFrameAndSpeak = async () => {
-    console.log("Attempting to generate animated frame and speak...");
     let textToSpeakForFrame: string | null = null;
     if (isUsableClonedTextAvailable() && textForSimulatedClonedVoiceRef.current) {
       textToSpeakForFrame = textForSimulatedClonedVoiceRef.current;
     } else if (isUsablePreparedTextAvailable() && preparedSpeechTextRef.current) {
       textToSpeakForFrame = preparedSpeechTextRef.current;
     }
-
-    // If the button is clicked while this specific audio is playing (and flicker is active)
+    
     if (currentAnimatedFrameTextIsSpeaking) {
-      console.log("Currently speaking/animating this frame. Stopping it.");
-      stopFlickerAnimation();
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-        window.speechSynthesis.cancel(); // This will trigger utterance.onend or onerror
+        window.speechSynthesis.cancel(); 
       }
-      // Explicitly reset speech states as utterance.onend might be delayed
       setIsSpeaking(false);
       setSpeakingText(null);
-      setCurrentFrameAudioText(null); // Clear the audio text associated with the frame
       return; 
     }
     
@@ -567,7 +515,6 @@ export default function Home() {
     setIsSpeaking(false); 
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false); 
-    if (isFlickerAnimationActive) stopFlickerAnimation(); 
     
     setIsGeneratingFrame(true);
     setAnimatedFramePreview(null); 
@@ -576,102 +523,76 @@ export default function Home() {
     toast({ title: "Generating AI Frame...", description: "AI is creating an expressive frame..." });
 
     try {
-      const textSnippet = textToSpeakForFrame.substring(0, 75); 
-      const animationPrompt = `Your task is to generate a single, expressive keyframe image of the person in the provided photo. This keyframe should depict them frozen mid-speech, as if they are just starting to speak the given text. CRITICAL: The mouth shape (viseme) and overall facial expression MUST precisely match the very first sounds/phonemes of the text: "${textSnippet}". The expression should also convey the appropriate emotion for this initial part of the text. Make it look like a high-quality animation cel ready for a speaking scene.`;
-      
-      console.log("Calling generateAnimatedFrame with prompt:", animationPrompt);
-      const { generatedFrameDataUri, errorMessage } = await generateAnimatedFrame({
+    const textSnippet = textToSpeakForFrame.substring(0, 150); 
+    const animationPrompt = `Your task is to generate a single, expressive keyframe image of the person in the provided photo. This keyframe should depict them frozen mid-speech, as if they are just starting to speak the given text. CRITICAL: The mouth shape (viseme) and overall facial expression MUST precisely match the very first sounds/phonemes of the text: "${textSnippet}". The expression should also convey the appropriate emotion for this initial part of the text. Make it look like a high-quality animation cel ready for a speaking scene.`;
+    
+    const { generatedFrameDataUri, errorMessage } = await generateAnimatedFrame({
         originalImageDataUri: imagePreviewRef.current,
         animationPrompt: animationPrompt,
-      });
+    });
 
-      if (errorMessage) {
+    if (errorMessage) {
         throw new Error(errorMessage);
-      }
+    }
 
-      if (generatedFrameDataUri) {
+    if (generatedFrameDataUri) {
         setAnimatedFramePreview(generatedFrameDataUri);
-        setActiveDisplayFrame('animated'); 
         toast({ title: "AI Frame Ready!", description: "Preparing to speak...", duration: 2000 });
-
-        if (isSpeechSupported && imagePreviewRef.current && generatedFrameDataUri) {
-          console.log("Starting flicker animation and speech.");
-          setActiveDisplayFrame('original'); 
-          setIsFlickerAnimationActive(true);
-
-          animationIntervalRef.current = setInterval(() => {
-            setActiveDisplayFrame(prev => (prev === 'original' ? 'animated' : 'original'));
-          }, 300); 
-
-          setTimeout(() => {
-            if (!isFlickerAnimationActive || currentFrameAudioText !== textToSpeakForFrame) {
-                console.log("Flicker or text changed before speech could start. Aborting speech for this frame.");
-                if (!isFlickerAnimationActive) {
-                    setIsSpeaking(false);
-                    setSpeakingText(null);
-                    // stopFlickerAnimation(); // Already handled if !isFlickerAnimationActive is false
-                }
-                return;
-            }
-
-            const utterance = new SpeechSynthesisUtterance(textToSpeakForFrame);
-            utterance.onstart = () => {
-              console.log("Speech started for animated frame.");
-              setIsSpeaking(true); 
-              setSpeakingText(textToSpeakForFrame); 
-              setIsSimulatedClonedVoiceSpeaking(false);
-            };
-            utterance.onend = () => {
-              console.log("Speech ended for animated frame.");
-              setIsSpeaking(false);
-              setSpeakingText(null);
-              stopFlickerAnimation(); // Stop flicker when speech ends
-            };
-            utterance.onerror = (event) => {
-              console.error("Speech error for animated frame:", event.error);
-              if (event.error === 'interrupted') {
-                toast({ title: "Speech Interrupted", description: "Animated frame speech was interrupted.", variant: "default" });
-              } else {
-                toast({ title: "Speech Error", description: `Could not play speech for animated frame. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
-              }
-              setIsSpeaking(false);
-              setSpeakingText(null);
-              stopFlickerAnimation(); // Stop flicker on speech error
-            };
-            window.speechSynthesis.speak(utterance);
-          }, 100);
-        } else if (!isSpeechSupported) {
-             toast({ title: "AI Frame Ready", description: "Browser speech not supported for playback.", variant: "default" });
-             // If no speech, flicker would be continuous. Now it won't start or will be stopped.
-             // We can decide to not start flicker if no speech, or let it run and user stops it.
-             // For now, let's not start flicker if speech is not supported.
-             if (animatedFramePreview) setActiveDisplayFrame('animated'); // Show the generated frame
-        }
-
-      } else {
+    } else {
         throw new Error("AI generation succeeded but returned no image.");
-      }
+    }
 
     } catch (error: any) {
       console.error('[GenerateAnimatedFrame] Error:', error);
-      const message = error.message || "Failed to generate or play animated frame.";
+      const message = error.message || "Failed to generate animated frame.";
       setAnimationError(message);
-      setActiveDisplayFrame('original'); 
       toast({ title: "Animation Error", description: message, variant: "destructive" });
       setCurrentFrameAudioText(null); 
-      if (isFlickerAnimationActive) stopFlickerAnimation();
+      setAnimatedFramePreview(imagePreviewRef.current); // Fallback to original image on error
+      setIsGeneratingFrame(false);
+      return; 
     } finally {
       setIsGeneratingFrame(false);
+    }
+    
+    // Proceed to speak if frame is available
+    if (isSpeechSupported && animatedFramePreview && textToSpeakForFrame ) { // Check animatedFramePreview instead of currentFrameAudioText for existence
+        setTimeout(() => {
+        if (currentFrameAudioText !== textToSpeakForFrame) { 
+            return;
+        }
+        const utterance = new SpeechSynthesisUtterance(textToSpeakForFrame);
+        utterance.onstart = () => {
+            setIsSpeaking(true); 
+            setSpeakingText(textToSpeakForFrame); 
+            setIsSimulatedClonedVoiceSpeaking(false);
+        };
+        utterance.onend = () => {
+            setIsSpeaking(false);
+            setSpeakingText(null);
+        };
+        utterance.onerror = (event) => {
+            if (event.error === 'interrupted') {
+            toast({ title: "Speech Interrupted", description: "Animated frame speech was interrupted.", variant: "default" });
+            } else {
+            toast({ title: "Speech Error", description: `Could not play speech for animated frame. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
+            }
+            setIsSpeaking(false);
+            setSpeakingText(null);
+        };
+        window.speechSynthesis.speak(utterance);
+        }, 100); 
+    } else if (!isSpeechSupported) {
+            toast({ title: "AI Frame Ready", description: "Browser speech not supported for playback.", variant: "default" });
+    } else if (!textToSpeakForFrame) {
+        toast({ title: "Error", description: "No text available to speak for the frame.", variant: "destructive" });
     }
   };
   
   const currentPreparedTextIsSpeaking = isSpeaking && preparedSpeechText && speakingText === preparedSpeechText;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoice;
 
-
-  const displayImageSrc = activeDisplayFrame === 'animated' && animatedFramePreview
-    ? animatedFramePreview
-    : imagePreview; 
+  const displayImageSrcForAnimatedSection = animatedFramePreview || imagePreview; 
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -709,7 +630,7 @@ export default function Home() {
                   className="text-base file:text-primary file:font-medium"
                   disabled={anyLoading}
                 />
-                {imagePreview && activeDisplayFrame !== 'animated' && !animatedFramePreview && ( 
+                {imagePreview && ( 
                   <div className={`mt-2 border rounded-md p-2 inline-block bg-muted/30`}>
                     <Image
                       src={imagePreview}
@@ -738,7 +659,7 @@ export default function Home() {
                         onClick={handleSpeakPreparedText}
                         variant="outline"
                         size="sm"
-                        disabled={anyLoading || isSimulatedClonedVoiceSpeaking || (isFlickerAnimationActive && !currentPreparedTextIsSpeaking) }
+                        disabled={anyLoading || isSimulatedClonedVoiceSpeaking || currentAnimatedFrameTextIsSpeaking}
                       >
                         {currentPreparedTextIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
                       </Button>
@@ -790,7 +711,7 @@ export default function Home() {
                     onClick={handlePlaySimulatedClonedVoice}
                     variant="outline"
                     size="sm"
-                    disabled={anyLoading || (isSpeaking && !isSimulatedClonedVoiceSpeakingRef.current) || (isFlickerAnimationActive && !currentSimulatedClonedVoiceIsSpeaking) }
+                    disabled={anyLoading || (isSpeaking && !isSimulatedClonedVoiceSpeakingRef.current) || currentAnimatedFrameTextIsSpeaking}
                    >
                      {currentSimulatedClonedVoiceIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Simulated Voice</> : <><Volume2 className="mr-2 h-4 w-4" />Play Simulated Cloned Voice</>}
                    </Button>
@@ -802,7 +723,7 @@ export default function Home() {
             </div>
           </SectionCard>
 
-          <SectionCard title="AI Animated Frame & Speech (Mock)" icon={<AiSparkles className="text-primary" />}>
+          <SectionCard title="AI Animated Frame & Speech (Mock)" icon={<Sparkles className="text-primary" />}>
             <div className="space-y-4">
                <div>
                 <Label htmlFor="animation-info" className="text-base">Image &amp; Audio Source for Animation:</Label>
@@ -820,7 +741,7 @@ export default function Home() {
 
               <Button
                 onClick={handleGenerateAnimatedFrameAndSpeak}
-                disabled={isGeneratingSpeech || isCloningVoice || (isGeneratingFrame || (!currentAnimatedFrameTextIsSpeaking && (!selectedImage || !isTextAvailableForAIFrameSection))) }
+                disabled={isGeneratingSpeech || isCloningVoice || (isGeneratingFrame || (!selectedImage || !isTextAvailableForAIFrameSection))}
                 className="w-full sm:w-auto"
               >
                 {isGeneratingFrame ? (
@@ -828,13 +749,13 @@ export default function Home() {
                 ) : currentAnimatedFrameTextIsSpeaking ? (
                   <><StopCircle className="mr-2 h-4 w-4" /> Stop Speaking</>
                 ) : (
-                  <><AiSparkles className="mr-2 h-4 w-4" />Generate Animated Frame & Play Speech</>
+                  <><Sparkles className="mr-2 h-4 w-4" />Generate Animated Frame & Play Speech</>
                 )}
               </Button>
               
               <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow relative min-h-[250px]">
                 <Label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-2">
-                  <AiSparkles className="h-5 w-5"/>
+                  <Sparkles className="h-5 w-5"/>
                   Animated Output:
                 </Label>
                 <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden min-h-[200px] relative">
@@ -844,16 +765,16 @@ export default function Home() {
                       <p className="text-lg font-semibold text-white">Generating AI Frame...</p>
                       <p className="text-sm text-gray-300">AI is creating an expressive image.</p>
                     </div>
-                  ) : displayImageSrc ? (
+                  ) : displayImageSrcForAnimatedSection ? (
                      <Image
-                        key={displayImageSrc} 
-                        src={displayImageSrc}
-                        alt={activeDisplayFrame === 'animated' ? "AI generated speaking frame" : "Original uploaded image"}
+                        key={displayImageSrcForAnimatedSection} 
+                        src={displayImageSrcForAnimatedSection}
+                        alt={animatedFramePreview && animatedFramePreview !== imagePreview ? "AI generated speaking frame" : "Original uploaded image"}
                         fill
                         style={{ objectFit: 'contain' }}
                         className="rounded-md bg-black"
                         priority={true} 
-                        data-ai-hint={activeDisplayFrame === 'animated' ? "animated frame" : "original image"}
+                        data-ai-hint={animatedFramePreview && animatedFramePreview !== imagePreview ? "animated frame" : "original image"}
                     />
                   ) : ( 
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
@@ -870,7 +791,7 @@ export default function Home() {
                   </div>
                 )}
                  <p className="text-xs text-muted-foreground mt-2 italic">
-                    Note: This feature uses AI to generate a "speaking" version of your uploaded image. While audio plays, the display will alternate between your original image and this AI-generated image, creating a flicker animation effect. The animation stops when the audio finishes or is manually stopped. It does not produce a continuous video.
+                    Note: This feature uses AI to generate a "speaking" version of your uploaded image. This AI-generated image is displayed once ready and remains static while the audio plays. The "animation" is the single change to this expressive frame. The image does not animate continuously throughout the speech.
                   </p>
               </div>
             </div>
@@ -883,3 +804,4 @@ export default function Home() {
     </div>
   );
 }
+

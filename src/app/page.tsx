@@ -674,7 +674,7 @@ export default function Home() {
                   placeholder="Type or paste your text here..."
                   rows={4}
                   className="text-base mt-1"
-                  disabled={anyLoading}
+                  disabled={anyLoading || isAnimatingFace}
                 />
               </div>
               <div className="space-y-2">
@@ -688,7 +688,7 @@ export default function Home() {
                   accept="image/*"
                   onChange={handleImageChange} 
                   className="text-base file:text-primary file:font-medium"
-                  disabled={anyLoading}
+                  disabled={anyLoading || isAnimatingFace}
                 />
                 {imagePreview && (
                   <div className="mt-2 border rounded-md p-2 inline-block bg-muted/30">
@@ -892,9 +892,6 @@ export default function Home() {
                   </div>
                 )}
               </div>
-               <p className="text-sm text-muted-foreground mt-4">
-                This section demonstrates the UI for a face animation feature. The "Animate Face" button uses AI to generate a *single still image* as a dynamic placeholder. When the image appears, the system will attempt to auto-play the corresponding audio. Actual lip-synced video animation requires a dedicated backend service not implemented here.
-              </p>
             </div>
           </SectionCard>
         </div>

@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, Video, AlertTriangle, Image as ImageIcon, Film } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, VideoOff, AlertTriangle, Image as ImageIcon, Film } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame, GenerateAnimatedFrameInput } from '@/ai/flows/generate-animated-frame-flow';
 
@@ -130,7 +130,7 @@ export default function Home() {
       reader.onloadend = () => {
         const result = reader.result as string;
         setImagePreview(result);
-        setAnimatedFramePreview(null); // Reset animated frame if new base image is uploaded
+        setAnimatedFramePreview(null); 
       };
       reader.onerror = () => {
         console.error("FileReader error when trying to load image.");
@@ -396,7 +396,7 @@ export default function Home() {
     setIsSimulatedClonedVoiceSpeaking(false);
     
     setTextForSimulatedClonedVoice(null); 
-    setAnimatedFramePreview(null); // Clear previous animation
+    setAnimatedFramePreview(null); 
     setAnimationError(null);
     
     try {
@@ -510,28 +510,42 @@ export default function Home() {
   }, [isSpeechSupported, toast]);
 
   const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingFrame;
+  
+  const isUsablePreparedTextAvailable = () => 
+    preparedSpeechText && 
+    preparedSpeechText.trim() !== "" && 
+    !preparedSpeechText.toLowerCase().startsWith("no text was provided") && 
+    !preparedSpeechText.toLowerCase().startsWith("error:");
 
-  const isTextAvailableForAnimation =
-    (preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && !preparedSpeechText.toLowerCase().startsWith("error:")) ||
-    (textForSimulatedClonedVoice && textForSimulatedClonedVoice.trim() !== "");
+  const isUsableClonedTextAvailable = () =>
+    textForSimulatedClonedVoice && textForSimulatedClonedVoice.trim() !== "";
+
+  const isTextAvailableForAnimation = isUsablePreparedTextAvailable() || isUsableClonedTextAvailable();
 
 
   const handleGenerateAnimatedFrameAndSpeak = async () => {
     console.log('[handleGenerateAnimatedFrameAndSpeak] START.');
     setAnimationError(null); 
 
-    const currentHasPreparedTextAudio = preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && !preparedSpeechText.toLowerCase().startsWith("error:");
-    const currentHasSimulatedClonedAudio = !!(textForSimulatedClonedVoice && textForSimulatedClonedVoice.trim() !== "");
-    
     let textToSpeakForAnimation: string | null = null;
-    if (currentHasSimulatedClonedAudio && textForSimulatedClonedVoice) {
+    if (isUsableClonedTextAvailable() && textForSimulatedClonedVoice) {
       textToSpeakForAnimation = textForSimulatedClonedVoice;
-      console.log(`[handleGenerateAnimatedFrameAndSpeak] Using "simulated cloned audio" text for animation.`);
-    } else if (currentHasPreparedTextAudio && preparedSpeechText) {
+      console.log(`[handleGenerateAnimatedFrameAndSpeak] Using "simulated cloned audio" text for animation: "${textToSpeakForAnimation.substring(0,30)}..."`);
+    } else if (isUsablePreparedTextAvailable() && preparedSpeechText) {
       textToSpeakForAnimation = preparedSpeechText;
-      console.log(`[handleGenerateAnimatedFrameAndSpeak] Using "prepared speech text" for animation.`);
+      console.log(`[handleGenerateAnimatedFrameAndSpeak] Using "prepared speech text" for animation: "${textToSpeakForAnimation.substring(0,30)}..."`);
     }
 
+    // Check if the button was clicked to STOP the currently playing animated frame's audio
+    if (isSpeakingRef.current && speakingTextRef.current === textToSpeakForAnimation && animatedFramePreview) {
+        console.log('[handleGenerateAnimatedFrameAndSpeak] Action: STOP speaking for animated frame.');
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+        setSpeakingText(null);
+        setIsSimulatedClonedVoiceSpeaking(false); // Ensure this is also reset
+        return; 
+    }
+    
     if (!imagePreview || !selectedImage) { 
       toast({ title: "Image Required for Animation", description: "Please upload an image in the 'Text & Image to Speech Preparation' section.", variant: "destructive" });
       console.log('[handleGenerateAnimatedFrameAndSpeak] Aborted: No image selected.');
@@ -543,7 +557,8 @@ export default function Home() {
       return;
     }
     
-    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
+    // Cancel any other ongoing speech before starting new generation/speech
+    if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
         console.log('[handleGenerateAnimatedFrameAndSpeak] Cancelling ongoing browser speech before animation generation attempt.');
         window.speechSynthesis.cancel();
     }
@@ -552,7 +567,7 @@ export default function Home() {
     setIsSimulatedClonedVoiceSpeaking(false);
 
     setIsGeneratingFrame(true);
-    setAnimatedFramePreview(null); // Clear previous animated frame
+    setAnimatedFramePreview(null); 
     console.log('[handleGenerateAnimatedFrameAndSpeak] Cleared animatedFramePreview, isGeneratingFrame is true.');
 
     try {
@@ -565,7 +580,7 @@ export default function Home() {
         animationPrompt: animationPrompt,
       };
 
-      console.log('[handleGenerateAnimatedFrameAndSpeak] Calling generateAnimatedFrame Genkit flow.');
+      console.log('[handleGenerateAnimatedFrameAndSpeak] Calling generateAnimatedFrame Genkit flow with prompt:', animationPrompt);
       const result = await generateAnimatedFrame(input);
 
       if (result.generatedFrameDataUri) {
@@ -574,23 +589,43 @@ export default function Home() {
 
         // Speak the text after successfully generating the frame
         if (isSpeechSupported) {
-          setIsSpeaking(true);
-          setSpeakingText(textToSpeakForAnimation);
-          setIsSimulatedClonedVoiceSpeaking(false);
+          // Ensure previous speaking states are cleared before setting new ones for this specific audio
+          setIsSimulatedClonedVoiceSpeaking(false); // Explicitly false
+          setIsSpeaking(true); // This is for the animated frame's audio
+          setSpeakingText(textToSpeakForAnimation); 
 
           setTimeout(() => {
             if (!isSpeakingRef.current || speakingTextRef.current !== textToSpeakForAnimation) {
-              console.log('[AnimatedFrame Speak] Speak request cancelled or text changed. Current isSpeakingRef:', isSpeakingRef.current);
-              if (isSpeakingRef.current) { setIsSpeaking(false); setSpeakingText(null); }
+              console.log('[AnimatedFrame Speak] Speak request cancelled or text changed. Current isSpeakingRef:', isSpeakingRef.current, 'speakingTextRef:', speakingTextRef.current);
+              if (isSpeakingRef.current && animatedFramePreview) { // Only reset if it was meant for this frame
+                setIsSpeaking(false); 
+                setSpeakingText(null); 
+              }
               return;
             }
-            const utterance = new SpeechSynthesisUtterance(textToSpeakForAnimation);
-            utterance.onstart = () => { console.log('[AnimatedFrame Speak] Utterance started.'); setIsSpeaking(true); setSpeakingText(textToSpeakForAnimation); };
-            utterance.onend = () => { console.log('[AnimatedFrame Speak] Utterance ended.'); setIsSpeaking(false); setSpeakingText(null); };
+            console.log('[AnimatedFrame Speak] setTimeout: Speaking now with text:', textToSpeakForAnimation);
+            const utterance = new SpeechSynthesisUtterance(textToSpeakForAnimation!);
+            utterance.onstart = () => { 
+              console.log('[AnimatedFrame Speak] Utterance started.'); 
+              setIsSpeaking(true); 
+              setSpeakingText(textToSpeakForAnimation);
+              setIsSimulatedClonedVoiceSpeaking(false);
+            };
+            utterance.onend = () => { 
+              console.log('[AnimatedFrame Speak] Utterance ended.'); 
+              setIsSpeaking(false); 
+              setSpeakingText(null); 
+            };
             utterance.onerror = (event) => {
-              console.error("Speech synthesis error (AnimatedFrame Speak).", event);
-              toast({ title: "Speech Error", description: `Could not play speech for animated frame. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
-              setIsSpeaking(false); setSpeakingText(null);
+              if (event.error === 'interrupted') {
+                console.warn("Speech synthesis warning (AnimatedFrame Speak interrupted). Code:", event.error, "Event details:", event);
+                toast({ title: "Speech Interrupted", description: "Animated frame playback was interrupted.", variant: "default" });
+              } else {
+                console.error("Speech synthesis error (AnimatedFrame Speak). Code:", event.error, "Event details:", event);
+                toast({ title: "Speech Error", description: `Could not play speech for animated frame. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
+              }
+              setIsSpeaking(false); 
+              setSpeakingText(null);
             };
             window.speechSynthesis.speak(utterance);
           }, 100);
@@ -618,18 +653,37 @@ export default function Home() {
 
   const currentPreparedTextIsSpeaking = isSpeaking && speakingText === preparedSpeechText && preparedSpeechText !== null;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && !!textForSimulatedClonedVoice;
-  // For the animated frame, check if *its* specific text is being spoken
-  const currentAnimatedFrameTextIsSpeaking = isSpeaking && !!animatedFramePreview && (speakingText === preparedSpeechText || speakingText === textForSimulatedClonedVoice);
+  
+  // Refined logic for determining if the animated frame's specific audio is playing
+  const getSpeakingTextForCurrentAnimatedFrame = (): string | null => {
+    if (isSpeaking && speakingText && animatedFramePreview) {
+        // The text used for animation is either cloned voice text (if available and used) or prepared text.
+        // Check if `speakingText` matches the one that would have been selected.
+        const wasFromCloned = isUsableClonedTextAvailable() && speakingText === textForSimulatedClonedVoice;
+        const wasFromPrepared = isUsablePreparedTextAvailable() && speakingText === preparedSpeechText;
+
+        if (wasFromCloned || wasFromPrepared) {
+            return speakingText;
+        }
+    }
+    return null;
+  };
+  const speakingTextForCurrentAnimatedFrame = getSpeakingTextForCurrentAnimatedFrame();
+  const currentAnimatedFrameTextIsSpeaking = !!speakingTextForCurrentAnimatedFrame;
 
 
-  console.log('[Home render] States before JSX:', {
+  console.log('[Home render] States for UI:', {
     isGeneratingFrame,
     animatedFramePreview_available: !!animatedFramePreview,
     animationError,
     isGeneratingSpeech,
     isCloningVoice,
-    preparedSpeechText_value: preparedSpeechText ? preparedSpeechText.substring(0,50) + "..." : null,
-    textForSimulatedClonedVoice_value: textForSimulatedClonedVoice ? textForSimulatedClonedVoice.substring(0,50) + "..." : null,
+    preparedSpeechText_value: preparedSpeechText ? preparedSpeechText.substring(0,30) + "..." : null,
+    textForSimulatedClonedVoice_value: textForSimulatedClonedVoice ? textForSimulatedClonedVoice.substring(0,30) + "..." : null,
+    isSpeaking,
+    speakingText_value: speakingText ? speakingText.substring(0,30) + "..." : null,
+    currentAnimatedFrameTextIsSpeaking,
+    isTextAvailableForAnimation,
   });
 
   return (
@@ -749,9 +803,9 @@ export default function Home() {
                     onClick={handlePlaySimulatedClonedVoice}
                     variant="outline"
                     size="sm"
-                    disabled={anyLoading || isSpeaking && !isSimulatedClonedVoiceSpeakingRef.current || currentAnimatedFrameTextIsSpeaking}
+                    disabled={anyLoading || (isSpeaking && !isSimulatedClonedVoiceSpeakingRef.current) || currentAnimatedFrameTextIsSpeaking}
                    >
-                     {currentSimulatedClonedVoiceIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Simulated Voice</> : <><Volume2 className="mr-2 h-4 w-4" />Play Simulated Cloned Voice</>}
+                     {currentSimulatedClonedVoiceSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Simulated Voice</> : <><Volume2 className="mr-2 h-4 w-4" />Play Simulated Cloned Voice</>}
                    </Button>
                    <p className="text-sm text-muted-foreground">
                      This simulates the cloned voice using your browser's standard text-to-speech with the prepared text that was active during 'cloning'.
@@ -789,7 +843,7 @@ export default function Home() {
 
               <Button
                 onClick={handleGenerateAnimatedFrameAndSpeak}
-                disabled={anyLoading || !selectedImage || !isTextAvailableForAnimation || (isSpeaking && !currentAnimatedFrameTextIsSpeaking)}
+                disabled={anyLoading || !selectedImage || !isTextAvailableForAnimation || (isSpeaking && !currentAnimatedFrameTextIsSpeaking && !isSimulatedClonedVoiceSpeaking) }
                 className="w-full sm:w-auto"
               >
                 {isGeneratingFrame ? (
@@ -830,7 +884,7 @@ export default function Home() {
                       className="rounded-md"
                       data-ai-hint="animated portrait"
                     />
-                  ) : imagePreview ? ( // Show original uploaded image if no animated frame yet
+                  ) : imagePreview ? ( 
                      <Image
                       src={imagePreview}
                       alt="Uploaded image placeholder for animation"
@@ -867,3 +921,5 @@ export default function Home() {
     </div>
   );
 }
+
+    

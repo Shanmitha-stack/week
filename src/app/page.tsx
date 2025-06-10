@@ -553,7 +553,7 @@ export default function Home() {
     console.log('[handleGenerateVideo] Cleared generatedVideoUrl, isGeneratingVideo is true.');
 
     try {
-      toast({ title: "Starting Video Generation", description: "Preparing to send data to backend for lip-sync..." });
+      toast({ title: "Starting Video Generation", description: "Contacting backend for lip-sync video processing..." });
       
       const formData = new FormData();
       formData.append('image', selectedImage);
@@ -571,20 +571,13 @@ export default function Home() {
         try {
           errorData = await response.json();
         } catch (e) {
-          console.warn('[handleGenerateVideo] Could not parse JSON from error response. This is common for 404 errors if the server sends HTML/text instead of JSON.');
+          console.warn('[handleGenerateVideo] Could not parse JSON from error response.');
         }
-
-        if (response.status === 404 && response.url.includes('/api/true-lip-sync-video')) {
-          console.warn(`[handleGenerateVideo] Backend endpoint ${response.url} not found (404). This is expected as the backend is not implemented. UI will be silent.`);
-          // No toast for this specific expected 404. UI remains silent.
-          // Do not set videoGenerationError for this specific expected 404
-        } else {
-          const errorMessage = errorData?.message || `Backend error: ${response.status} ${response.statusText || 'Status text unavailable'}`;
-          console.error('[handleGenerateVideo] Backend request failed:', errorMessage, ...(errorData ? [errorData] : [`Status: ${response.status}`]));
-          setVideoGenerationError(errorMessage);
-          toast({ title: "Video Generation Failed", description: errorMessage, variant: "destructive" });
-        }
-        return; // Stop further processing
+        const errorMessage = errorData?.message || `Backend error: ${response.status} ${response.statusText || 'Status text unavailable'}`;
+        console.error('[handleGenerateVideo] Backend request failed:', errorMessage, ...(errorData ? [errorData] : [`Status: ${response.status}`]));
+        setVideoGenerationError(errorMessage);
+        toast({ title: "Video Generation Failed", description: errorMessage, variant: "destructive" });
+        return; 
       }
 
       const result = await response.json();
@@ -594,7 +587,7 @@ export default function Home() {
         setGeneratedVideoUrl(result.videoUrl);
         toast({ title: "Video Generation Successful", description: "Video is now available for playback." });
       } else {
-        const errMsg = "Backend did not return a video URL.";
+        const errMsg = result.message || "Backend did not return a video URL but request was OK.";
         console.error('[handleGenerateVideo]', errMsg, result);
         setVideoGenerationError(errMsg);
         toast({ title: "Video Generation Issue", description: errMsg, variant: "destructive" });
@@ -799,16 +792,6 @@ export default function Home() {
                 </p>
               )}
 
-              <div className="mt-4 p-3 border rounded-md bg-accent/10 text-accent-foreground/80 text-sm flex items-start gap-2">
-                <Info className="h-5 w-5 mt-0.5 shrink-0 text-accent" />
-                <p>
-                  This feature attempts to call a backend service (at <code>/api/true-lip-sync-video</code>) to generate a lip-synced video.
-                  True video lip-sync (like that produced by models such as Wav2Lip or SadTalker) requires a dedicated backend service, which is not implemented in this demonstration frontend. 
-                  The button above will try to make an API call to this placeholder endpoint. If the endpoint doesn't exist (as is currently the case), a '404 Not Found' error will occur, which is expected and will be silently logged to the console.
-                </p>
-              </div>
-
-
               <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">
                 <Label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-2">
                   <Video className="h-5 w-5"/>
@@ -838,7 +821,7 @@ export default function Home() {
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
-                      <VideoOff className="h-12 w-12 mb-4" />
+                      <VideoOff className="h-12 w-12 mb-4" data-ai-hint="video placeholder" />
                       <p className="text-lg font-semibold">Video will appear here</p>
                       <p className="text-sm">Upload an image, prepare audio text, then click "Generate Lip-Sync Video".</p>
                     </div>
@@ -861,4 +844,3 @@ export default function Home() {
     </div>
   );
 }
-

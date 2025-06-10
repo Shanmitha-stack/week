@@ -19,11 +19,9 @@ export async function POST(request: Request) {
     // Simulate a delay as video processing would take time
     await new Promise(resolve => setTimeout(resolve, 2500)); // Simulate 2.5 seconds processing
 
-    // Return a placeholder video URL. 
-    // Using placehold.co, but .mp4 isn't a real video format it serves. 
-    // This is for UI demonstration; a real backend would provide a link to an actual .mp4 file.
-    // Adding a timestamp to ensure the URL is unique for keying in React if needed.
-    const mockVideoUrl = `https://placehold.co/600x400.mp4/1a1a1a/ffffff?text=Mock+Video+${Date.now()}`;
+    // Return a URL to a real, short, sample MP4 video.
+    // This one is a 5-second CC0 video of a flower from MDN.
+    const mockVideoUrl = `https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4?t=${Date.now()}`; // Added timestamp to ensure URL uniqueness for React keying
     
     return NextResponse.json({ videoUrl: mockVideoUrl });
 
@@ -32,3 +30,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: 'Error processing request on placeholder backend', error: error.message || 'Unknown error' }, { status: 500 });
   }
 }
+

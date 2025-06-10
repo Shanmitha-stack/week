@@ -742,26 +742,7 @@ export default function Home() {
                   Video Output:
                 </Label>
                 <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden min-h-[200px] relative">
-                  {videoSectionIsLoading && !finalVideoUrl ? (
-                    <div className="flex flex-col items-center justify-center text-center p-4">
-                      <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-                      <p className="text-lg font-semibold text-white">
-                        {isGeneratingAIPoster ? "Generating AI Poster..." : "Fetching Video..."}
-                      </p>
-                      {isGeneratingAIPoster && <p className="text-sm text-gray-300">AI is creating a speaking version of your image.</p>}
-                      {isFetchingVideo && <p className="text-sm text-gray-300">Mock backend is preparing video.</p>}
-                      {(isGeneratingAIPoster || isFetchingVideo) && imagePreview && !aiPosterUrl && (
-                         <Image
-                            src={imagePreview}
-                            alt="Original image during processing"
-                            width={100}
-                            height={100}
-                            className="rounded-md object-contain mt-2 opacity-50"
-                            data-ai-hint="original image"
-                        />
-                      )}
-                    </div>
-                  ) : finalVideoUrl ? (
+                  {finalVideoUrl ? (
                      <video
                         key={finalVideoUrl} 
                         src={finalVideoUrl}
@@ -771,7 +752,16 @@ export default function Home() {
                         className="w-full h-full object-contain rounded-md bg-black"
                         data-ai-hint="generated video"
                     />
-                  ) : aiPosterUrl ? ( // AI Poster generated, but video not yet (or failed)
+                  ) : videoSectionIsLoading ? (
+                    <div className="flex flex-col items-center justify-center text-center p-4">
+                      <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+                      <p className="text-lg font-semibold text-white">
+                        {isGeneratingAIPoster ? "Generating AI Poster..." : "Fetching Video..."}
+                      </p>
+                      {isGeneratingAIPoster && <p className="text-sm text-gray-300">AI is creating a speaking version of your image.</p>}
+                      {isFetchingVideo && <p className="text-sm text-gray-300">Mock backend is preparing video.</p>}
+                    </div>
+                  ) : aiPosterUrl ? ( 
                      <Image
                         src={aiPosterUrl}
                         alt="AI Generated Poster"
@@ -780,7 +770,7 @@ export default function Home() {
                         className="rounded-md bg-black"
                         data-ai-hint="ai generated poster"
                     />
-                  ) : imagePreview ? ( // Original image before anything is generated
+                  ) : imagePreview ? ( 
                      <Image
                         src={imagePreview}
                         alt="Uploaded image placeholder for video"
@@ -789,7 +779,7 @@ export default function Home() {
                         className="rounded-md bg-black"
                         data-ai-hint="original uploaded video poster"
                     />
-                  ) : ( // Default placeholder if no image uploaded
+                  ) : ( 
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
                        <Video className="h-12 w-12 mb-4 text-muted-foreground/50" data-ai-hint="video placeholder" />
                       <p className="text-lg font-semibold">Video will appear here</p>

@@ -54,6 +54,7 @@ export default function Home() {
   const animationErrorRef = useRef(animationError);
   const currentFrameAudioTextRef = useRef(currentFrameAudioText);
 
+
   const stopFlickerAnimation = useCallback(() => {
     if (animationIntervalRef.current) {
       clearInterval(animationIntervalRef.current);
@@ -655,17 +656,28 @@ export default function Home() {
             if (result.generatedFrameDataUri) setActiveDisplayFrame(result.generatedFrameDataUri); 
             else if (imagePreviewRef.current) setActiveDisplayFrame(imagePreviewRef.current);
         }
-      } else if (flowErrorMessage) { // Check for flowErrorMessage *after* checking for a successful image
+      } else if (flowErrorMessage) {
+        let toastTitle = "Animation Error";
+        let toastDescription = flowErrorMessage;
+        let toastVariant: "default" | "destructive" = "destructive";
+        let uiErrorToDisplay = flowErrorMessage;
+
         if (flowErrorType === 'AI_DID_NOT_RETURN_IMAGE') {
-            console.warn('[GenerateAnimatedFrame] AI Flow Info:', flowErrorMessage);
-            toast({ title: "AI Image Issue", description: flowErrorMessage, variant: "default" });
+          console.warn('[GenerateAnimatedFrame] AI Flow Info (Model did not return image):', flowErrorMessage);
+          toastTitle = "AI Image Not Generated";
+          toastDescription = "The AI couldn't create an image for this request. This can happen sometimes. You could try again, perhaps with different text or a slightly different image.";
+          toastVariant = "default";
+          uiErrorToDisplay = toastDescription; 
+        } else if (flowErrorType === 'AI_API_ERROR') {
+          console.error('[GenerateAnimatedFrame] AI API Error:', flowErrorMessage);
         } else { 
-            console.error('[GenerateAnimatedFrame] AI Flow Error:', flowErrorMessage);
-            toast({ title: "Animation Error", description: flowErrorMessage, variant: "destructive" });
+          console.error('[GenerateAnimatedFrame] AI Flow Exception or other error:', flowErrorMessage);
         }
-        setAnimationError(flowErrorMessage);
+        
+        setAnimationError(uiErrorToDisplay);
+        toast({ title: toastTitle, description: toastDescription, variant: toastVariant });
         setActiveDisplayFrame(imagePreviewRef.current); 
-      } else { // Should not happen if schema is correct and flow always returns one or the other
+      } else { 
         const unexpectedMsg = "AI frame generation completed without an image or a specific error message.";
         console.warn('[GenerateAnimatedFrame] Unexpected outcome from AI flow:', unexpectedMsg);
         setAnimationError(unexpectedMsg);
@@ -680,7 +692,6 @@ export default function Home() {
       setActiveDisplayFrame(imagePreviewRef.current); 
     } finally {
       setIsGeneratingFrame(false);
-      // Ensure the correct frame is displayed if speech isn't running or an error occurred
       const speechNotRunningOrErrorOccurred = !(isSpeakingRef.current && speakingTextRef.current === currentFrameAudioTextRef.current) || animationErrorRef.current;
       if (speechNotRunningOrErrorOccurred && !isFlickerAnimationActive) { 
         if (animationErrorRef.current && imagePreviewRef.current) {
@@ -909,4 +920,3 @@ export default function Home() {
     </div>
   );
 }
-

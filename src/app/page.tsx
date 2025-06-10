@@ -54,7 +54,6 @@ export default function Home() {
   const animationErrorRef = useRef(animationError);
   const currentFrameAudioTextRef = useRef(currentFrameAudioText);
 
-
   const stopFlickerAnimation = useCallback(() => {
     if (animationIntervalRef.current) {
       clearInterval(animationIntervalRef.current);
@@ -62,6 +61,8 @@ export default function Home() {
     }
     setIsFlickerAnimationActive(false);
 
+    // Determine what to display when flicker stops
+    // Prioritize AI frame if no error, otherwise original, or null if nothing.
     if (animationErrorRef.current && imagePreviewRef.current) {
       setActiveDisplayFrame(imagePreviewRef.current); 
     } else if (animatedFramePreviewRef.current) {
@@ -102,6 +103,8 @@ export default function Home() {
       setActiveDisplayFrame(null);
       if (isFlickerAnimationActive) stopFlickerAnimation();
     } else {
+      // If flicker isn't active, decide what static frame to show.
+      // If speech is not for the current AI frame context, prefer AI frame. Otherwise, original.
       if (!isFlickerAnimationActive) {
          if (animatedFramePreviewRef.current && (!speakingTextRef.current || speakingTextRef.current !== currentFrameAudioTextRef.current)) {
           setActiveDisplayFrame(animatedFramePreviewRef.current);
@@ -114,8 +117,10 @@ export default function Home() {
 
   useEffect(() => {
     animatedFramePreviewRef.current = animatedFramePreview;
+    // If an animated frame becomes available (or null) and flicker isn't active, update display.
+    // Prefer AI frame if speech context doesn't match or no speech.
      if (!animatedFramePreview && !isFlickerAnimationActive) {
-        setActiveDisplayFrame(imagePreviewRef.current);
+        setActiveDisplayFrame(imagePreviewRef.current); // Fallback to original if AI frame removed
     } else if (animatedFramePreview && !isFlickerAnimationActive && (!speakingTextRef.current || speakingTextRef.current !== currentFrameAudioTextRef.current)) {
         setActiveDisplayFrame(animatedFramePreview);
     }
@@ -149,7 +154,7 @@ export default function Home() {
       const logVoices = () => {
         const voices = window.speechSynthesis.getVoices();
         if (voices.length === 0) {
-          console.warn('No speech synthesis voices currently available. They might load asynchronously.');
+          // Voices might load asynchronously
         }
       };
       logVoices(); 
@@ -160,9 +165,9 @@ export default function Home() {
       }
     } else {
       setIsSpeechSupported(false);
-      console.warn('Speech synthesis not supported by this browser.');
     }
 
+    // Cleanup function
     return () => {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
          if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
@@ -170,12 +175,13 @@ export default function Home() {
         }
         window.speechSynthesis.onvoiceschanged = null; 
       }
+      // Reset states that indicate active speech/animation
       setIsSpeaking(false);
       setSpeakingText(null);
       setIsSimulatedClonedVoiceSpeaking(false);
-      if (isFlickerAnimationActive) stopFlickerAnimation(); // Added this line
+      if (isFlickerAnimationActive) stopFlickerAnimation();
     };
-  }, [isFlickerAnimationActive, stopFlickerAnimation]); // Added dependencies
+  }, [isFlickerAnimationActive, stopFlickerAnimation]); 
   
 
   const resetOutputsDependentOnTextOrImage = useCallback(() => {
@@ -189,6 +195,7 @@ export default function Home() {
     if (isFlickerAnimationActive) stopFlickerAnimation();
 
 
+    // Cancel any ongoing speech synthesis
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
         window.speechSynthesis.cancel(); 
     }
@@ -206,10 +213,9 @@ export default function Home() {
       reader.onloadend = () => {
         const result = reader.result as string;
         setImagePreview(result);
-        setActiveDisplayFrame(result); 
+        setActiveDisplayFrame(result); // Initially show the uploaded image
       };
       reader.onerror = () => {
-        console.error("FileReader error when trying to load image.");
         setSelectedImage(null); 
         setImagePreview(null);
         setActiveDisplayFrame(null);
@@ -238,6 +244,7 @@ export default function Home() {
       return;
     }
 
+    // Stop any current speech or animation
     if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending) ) {
       window.speechSynthesis.cancel();
     }
@@ -246,25 +253,25 @@ export default function Home() {
     setIsSimulatedClonedVoiceSpeaking(false); 
     if (isFlickerAnimationActive) stopFlickerAnimation();
     
-    setAnimatedFramePreview(null); 
+    setAnimatedFramePreview(null); // Reset AI frame from other sections
     setAnimationError(null);
-    setActiveDisplayFrame(imagePreviewRef.current);
+    setActiveDisplayFrame(imagePreviewRef.current); // Ensure display is on original image
 
 
     setIsGeneratingSpeech(true);
-    setPreparedSpeechText(null); 
-    setTextForSimulatedClonedVoice(null);
-    setCurrentFrameAudioText(null);
+    setPreparedSpeechText(null); // Clear previous prepared text
+    setTextForSimulatedClonedVoice(null); // Clear mock cloned voice text
+    setCurrentFrameAudioText(null); // Clear context for AI frame section
 
 
     let imageDataUri: string | undefined = undefined;
-    if (imagePreviewRef.current && selectedImage) { 
+    if (imagePreviewRef.current && selectedImage) { // Use the ref for current value
         imageDataUri = imagePreviewRef.current;
     }
 
     try {
       const { preparedText } = await prepareTextForSpeech({ text: textInput, imageDataUri });
-      setPreparedSpeechText(preparedText); 
+      setPreparedSpeechText(preparedText); // Update state with new prepared text
 
       const shouldSpeak = preparedText &&
                           preparedText.trim() !== "" &&
@@ -272,12 +279,15 @@ export default function Home() {
                           !preparedText.toLowerCase().startsWith("error:");
 
       if (isSpeechSupported && shouldSpeak) {
-        setIsSpeaking(true); 
-        setSpeakingText(preparedText); 
-        setIsSimulatedClonedVoiceSpeaking(false);
+        setIsSpeaking(true); // Set speaking state for this section's output
+        setSpeakingText(preparedText); // Track what's being spoken
+        setIsSimulatedClonedVoiceSpeaking(false); // Not cloned voice
 
+        // Slight delay to allow state updates and ensure synthesis engine is ready
         setTimeout(() => {
+            // Check if still supposed to speak this text
             if (!isSpeakingRef.current || speakingTextRef.current !== preparedText) {
+                 // If speaking state changed or text changed before utterance starts, cancel
                  if (isSpeakingRef.current && speakingTextRef.current !== preparedText) {
                     setIsSpeaking(false); 
                     setSpeakingText(null);
@@ -286,6 +296,7 @@ export default function Home() {
             }
             const utterance = new SpeechSynthesisUtterance(preparedText);
             utterance.onstart = () => {
+              // Confirm speaking state when utterance actually starts
               setIsSpeaking(true); 
               setIsSimulatedClonedVoiceSpeaking(false);
               setSpeakingText(preparedText);
@@ -311,13 +322,13 @@ export default function Home() {
           description: "Speaking the prepared text...",
           duration: 3000,
         });
-      } else if (shouldSpeak) {
+      } else if (shouldSpeak) { // Text is good, but speech not supported
         toast({
           title: "Input Processed",
           description: `Prepared text: "${preparedText.substring(0,100)}${preparedText.length > 100 ? '...' : ''}". Browser speech synthesis not supported or text not suitable for auto-play.`,
           duration: 6000,
         });
-      } else {
+      } else { // Text not suitable for speaking (e.g., "no text provided")
          toast({
           title: "Input Processed",
           description: preparedText || "An issue occurred while preparing text.",
@@ -326,7 +337,7 @@ export default function Home() {
       }
     } catch (error) {
       const errorMessage = "Error: Could not process input for speech.";
-      setPreparedSpeechText(errorMessage);
+      setPreparedSpeechText(errorMessage); // Show error in prepared text area
       toast({ title: "Processing Error", description: error instanceof Error ? `${errorMessage} ${error.message}`: errorMessage, variant: "destructive" });
     } finally {
       setIsGeneratingSpeech(false);
@@ -340,8 +351,9 @@ export default function Home() {
       return;
     }
 
-    const textToSpeak = preparedSpeechTextRef.current; 
+    const textToSpeak = preparedSpeechTextRef.current; // Use ref for current value
 
+    // If already speaking this exact text (and not via flicker animation), stop it.
     if (isSpeakingRef.current && speakingTextRef.current === textToSpeak && !isFlickerAnimationActive) { 
       window.speechSynthesis.cancel(); 
       setIsSpeaking(false);
@@ -355,19 +367,21 @@ export default function Home() {
                                     !textToSpeak.toLowerCase().startsWith("error:");
 
     if (currentPreparedTextIsUsable) { 
+      // Stop any other speech/animation
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
         window.speechSynthesis.cancel(); 
       }
       
-      setIsSpeaking(true); 
-      setSpeakingText(textToSpeak); 
-      setIsSimulatedClonedVoiceSpeaking(false); 
-      if (isFlickerAnimationActive) stopFlickerAnimation();
+      setIsSpeaking(true); // Set speaking state for this section
+      setSpeakingText(textToSpeak); // Track what's being spoken
+      setIsSimulatedClonedVoiceSpeaking(false); // Not cloned voice
+      if (isFlickerAnimationActive) stopFlickerAnimation(); // Stop AI frame animation if active
 
       setTimeout(() => {
         if (!isSpeakingRef.current || speakingTextRef.current !== textToSpeak) { 
-           if (isSpeakingRef.current && speakingTextRef.current !== textToSpeak) { 
-              setIsSpeaking(false); 
+           // If speaking state changed or text changed before utterance starts, cancel
+           if (isSpeakingRef.current && speakingTextRef.current !== textToSpeak) { // Check specifically if it's speaking *something else*
+              setIsSpeaking(false); // Reset if it was, but now for a different text
               setSpeakingText(null);
            }
           return;
@@ -404,10 +418,12 @@ export default function Home() {
     if (file) setSelectedVoiceSample(file);
     else setSelectedVoiceSample(null);
     
+    // Reset outputs related to this section and subsequent ones
     setTextForSimulatedClonedVoice(null);
-    if (isFlickerAnimationActive) stopFlickerAnimation();
+    if (isFlickerAnimationActive) stopFlickerAnimation(); // Stop AI frame animation
 
 
+    // Cancel any ongoing speech synthesis
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
         window.speechSynthesis.cancel();
     }
@@ -417,7 +433,7 @@ export default function Home() {
   };
 
  const isPreparedTextAvailableAndUsable = () => {
-    const currentPreparedText = preparedSpeechTextRef.current; 
+    const currentPreparedText = preparedSpeechTextRef.current; // Use ref for current value
     return currentPreparedText &&
            currentPreparedText.trim() !== "" &&
            !currentPreparedText.toLowerCase().startsWith("no text was provided") &&
@@ -429,19 +445,20 @@ export default function Home() {
     toast({ title: "Mock Voice Cloning", description: "Initializing voice cloning process..." });
     
     const currentPreparedTextIsUsableAtStart = isPreparedTextAvailableAndUsable();
-    const currentPreparedSpeechTextValue = preparedSpeechTextRef.current; 
+    const currentPreparedSpeechTextValue = preparedSpeechTextRef.current; // Capture current value
 
     if (!selectedVoiceSample) {
       toast({ title: "Voice Sample Required", description: "Please select a voice sample.", variant: "destructive" });
       setIsCloningVoice(false);
       return;
     }
-    if (!currentPreparedTextIsUsableAtStart || !currentPreparedSpeechTextValue) { 
+    if (!currentPreparedTextIsUsableAtStart || !currentPreparedSpeechTextValue) { // Use captured value
       toast({ title: "Prepared Speech Text Required", description: "Please process some text for speech first. Voice cloning needs text to synthesize.", variant: "destructive" });
       setIsCloningVoice(false);
       return;
     }
     
+    // Stop any current speech or animation
     if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
         window.speechSynthesis.cancel();
     }
@@ -450,9 +467,10 @@ export default function Home() {
     setIsSimulatedClonedVoiceSpeaking(false);
     if (isFlickerAnimationActive) stopFlickerAnimation();
     
-    setTextForSimulatedClonedVoice(null); 
+    setTextForSimulatedClonedVoice(null); // Clear previous mock cloned voice text
     
     try {
+      // Simulate asynchronous operations
       await new Promise(resolve => setTimeout(resolve, 1000)); 
       toast({ title: "Mock Voice Cloning", description: "Processing voice sample..." });
       
@@ -461,13 +479,14 @@ export default function Home() {
       
       await new Promise(resolve => setTimeout(resolve, 2000)); 
 
-      const stillUsablePreparedText = preparedSpeechTextRef.current; 
+      // Re-check prepared text at the time of setting the cloned voice text
+      const stillUsablePreparedText = preparedSpeechTextRef.current; // Use ref for *latest* value
       if (stillUsablePreparedText && 
           stillUsablePreparedText.trim() !== "" &&
           !stillUsablePreparedText.toLowerCase().startsWith("no text was provided") &&
           !stillUsablePreparedText.toLowerCase().startsWith("error:")
       ) {
-        setTextForSimulatedClonedVoice(stillUsablePreparedText); 
+        setTextForSimulatedClonedVoice(stillUsablePreparedText); // Set text for simulated cloned voice
         toast({ title: "Mock Voice Cloning Complete", description: `Speech based on "${stillUsablePreparedText.substring(0,50)}..." using voice sample "${selectedVoiceSample.name}" is (mock) ready for simulated playback.` });
       } else {
         setTextForSimulatedClonedVoice(null);
@@ -482,7 +501,7 @@ export default function Home() {
   };
 
   const handlePlaySimulatedClonedVoice = useCallback(() => {
-    const currentTextForSimulated = textForSimulatedClonedVoiceRef.current; 
+    const currentTextForSimulated = textForSimulatedClonedVoiceRef.current; // Use ref for current value
 
     if (!isSpeechSupported) {
         toast({ title: "Speech Not Supported", description: "Your browser does not support speech synthesis.", variant: "destructive" });
@@ -493,33 +512,36 @@ export default function Home() {
         return;
     }
 
-    if (isSimulatedClonedVoiceSpeakingRef.current) { 
+    // If already speaking this exact simulated voice, stop it.
+    if (isSimulatedClonedVoiceSpeakingRef.current) { // Check specific flag for this playback type
         window.speechSynthesis.cancel();
         setIsSimulatedClonedVoiceSpeaking(false);
         return;
     }
 
+    // Stop any other speech/animation
     if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
         window.speechSynthesis.cancel(); 
     }
     
-    setIsSimulatedClonedVoiceSpeaking(true); 
-    setIsSpeaking(false); 
-    setSpeakingText(null); 
-    if (isFlickerAnimationActive) stopFlickerAnimation();
+    setIsSimulatedClonedVoiceSpeaking(true); // Set speaking state for this section
+    setIsSpeaking(false); // Not standard prepared text speech
+    setSpeakingText(null); // Clear other speaking text tracker
+    if (isFlickerAnimationActive) stopFlickerAnimation(); // Stop AI frame animation
     
     setTimeout(() => {
-        if (!isSimulatedClonedVoiceSpeakingRef.current) { 
+        if (!isSimulatedClonedVoiceSpeakingRef.current) { // Check if still supposed to speak
             return;
         }
+        // Ensure the text context hasn't changed
         if (textForSimulatedClonedVoiceRef.current !== currentTextForSimulated) {
-            setIsSimulatedClonedVoiceSpeaking(false); 
+            setIsSimulatedClonedVoiceSpeaking(false); // Context changed, cancel
             return;
         }
 
         const utterance = new SpeechSynthesisUtterance(currentTextForSimulated);
         utterance.onstart = () => {
-            setIsSimulatedClonedVoiceSpeaking(true); 
+            setIsSimulatedClonedVoiceSpeaking(true); // Confirm state
             setIsSpeaking(false); 
             setSpeakingText(null); 
         };
@@ -550,19 +572,27 @@ export default function Home() {
   const isUsableClonedTextAvailable = () =>
     textForSimulatedClonedVoiceRef.current && textForSimulatedClonedVoiceRef.current.trim() !== "";
 
-  const isTextAvailableForAIFrameSection = isUsablePreparedTextAvailable() || isUsableClonedTextAvailable();
+  // Determine which text to use for the AI frame generation and speech
+  const getTextForAIFrame = () => {
+    if (isUsableClonedTextAvailable() && textForSimulatedClonedVoiceRef.current) {
+      return textForSimulatedClonedVoiceRef.current;
+    } else if (isUsablePreparedTextAvailable() && preparedSpeechTextRef.current) {
+      return preparedSpeechTextRef.current;
+    }
+    return null;
+  };
+  
+  const isTextAvailableForAIFrameSection = !!getTextForAIFrame();
+
 
   const handleGenerateAnimatedFrameAndSpeak = async () => {
-    let textToSpeakForFrame: string | null = null;
-    if (isUsableClonedTextAvailable() && textForSimulatedClonedVoiceRef.current) {
-      textToSpeakForFrame = textForSimulatedClonedVoiceRef.current;
-    } else if (isUsablePreparedTextAvailable() && preparedSpeechTextRef.current) {
-      textToSpeakForFrame = preparedSpeechTextRef.current;
-    }
+    const textToSpeakForFrame = getTextForAIFrame();
     
-    const currentAudioIsActive = isSpeaking && speakingTextRef.current === textToSpeakForFrame && isFlickerAnimationActive;
-
-    if (currentAudioIsActive) {
+    // If already speaking this text with flicker animation, stop it.
+    const currentAudioIsActiveAndAnimating = isSpeakingRef.current && 
+                                           speakingTextRef.current === textToSpeakForFrame && 
+                                           isFlickerAnimationActive;
+    if (currentAudioIsActiveAndAnimating) {
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
         window.speechSynthesis.cancel(); 
       }
@@ -581,6 +611,7 @@ export default function Home() {
       return;
     }
 
+    // Stop any other ongoing speech/animation before starting new
     if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
       window.speechSynthesis.cancel();
     }
@@ -590,107 +621,146 @@ export default function Home() {
     if (isFlickerAnimationActive) stopFlickerAnimation(); 
     
     setIsGeneratingFrame(true);
-    setAnimatedFramePreview(null); 
-    setAnimationError(null); 
-    setActiveDisplayFrame(imagePreviewRef.current); 
-    setCurrentFrameAudioText(textToSpeakForFrame); 
+    setAnimatedFramePreview(null); // Clear previous AI frame
+    setAnimationError(null); // Clear previous errors
+    setActiveDisplayFrame(imagePreviewRef.current); // Show original while generating
+    setCurrentFrameAudioText(textToSpeakForFrame); // Set context for what this AI frame is for
     toast({ title: "Generating AI Frame...", description: "AI is creating an expressive frame..." });
+
+    let generatedFrameDataUri: string | null = null;
+    let aiErrorType: GenerateAnimatedFrameOutput['errorType'] = undefined;
+    let aiErrorMessage: string | null = null;
+    let userFriendlyAiMessage: string | null = null;
+
 
     try {
       const textSnippet = textToSpeakForFrame.substring(0, 150); 
       const animationPrompt = `Your primary task is to transform the provided static photo into a single, highly expressive keyframe image. This new image must depict the person as if they are frozen mid-sentence, actively speaking the initial words of this text: "${textSnippet}". CRITICALLY, the generated image needs to show *clear visual changes* from the original photo, especially in the mouth shape (viseme) to precisely match the first phonemes of the text, and in the eye expression to convey engagement in speech. The overall facial expression should be dynamic and appropriate for the act of speaking these initial words. The output MUST be the generated image.`;
       
-      const result: GenerateAnimatedFrameOutput = await generateAnimatedFrame({
+      const result = await generateAnimatedFrame({
           originalImageDataUri: imagePreviewRef.current,
           animationPrompt: animationPrompt,
       });
 
-      const flowErrorMessage = result.errorMessage;
-      const flowErrorType = result.errorType;
+      generatedFrameDataUri = result.generatedFrameDataUri || null;
+      aiErrorType = result.errorType;
+      aiErrorMessage = result.errorMessage || null;
 
-      if (result.generatedFrameDataUri) {
-        setAnimatedFramePreview(result.generatedFrameDataUri);
-        toast({ title: "AI Frame Ready!", description: "Preparing to speak...", duration: 2000 });
-
-        if (isSpeechSupported) {
-            setTimeout(() => {
-              if (currentFrameAudioTextRef.current !== textToSpeakForFrame || !animatedFramePreviewRef.current || animationErrorRef.current) { 
-                  if (isFlickerAnimationActive) stopFlickerAnimation();
-                  setActiveDisplayFrame(animationErrorRef.current ? imagePreviewRef.current : (animatedFramePreviewRef.current || imagePreviewRef.current));
-                  setIsSpeaking(false);
-                  setSpeakingText(null);
-                  return;
-              }
-              const utterance = new SpeechSynthesisUtterance(textToSpeakForFrame!);
-              utterance.onstart = () => {
-                  setIsSpeaking(true); 
-                  setSpeakingText(textToSpeakForFrame); 
-                  setIsSimulatedClonedVoiceSpeaking(false);
-                  if(animatedFramePreviewRef.current && !animationErrorRef.current) startFlickerAnimation();
-              };
-              utterance.onend = () => {
-                  setIsSpeaking(false);
-                  setSpeakingText(null);
-                  stopFlickerAnimation();
-              };
-              utterance.onerror = (event) => {
-                  const speechErrorMsg = `Speech error: ${event.error || 'unknown'}`;
-                  console.error('[GenerateAnimatedFrame] Speech Synthesis Error:', speechErrorMsg);
-                  if (!animationErrorRef.current) { 
-                      setAnimationError(speechErrorMsg);
-                      toast({ title: "Speech Error", description: `Could not play speech. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
-                  } else {
-                        toast({ title: "Speech Error", description: `Speech failed after image generation issue. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
-                  }
-                  setIsSpeaking(false);
-                  setSpeakingText(null);
-                  stopFlickerAnimation();
-              };
-              window.speechSynthesis.speak(utterance);
-            }, 100); 
-        } else {
-            toast({ title: "AI Frame Ready", description: "Browser speech not supported for playback.", variant: "default" });
-            if (result.generatedFrameDataUri) setActiveDisplayFrame(result.generatedFrameDataUri); 
-            else if (imagePreviewRef.current) setActiveDisplayFrame(imagePreviewRef.current);
-        }
-      } else if (flowErrorMessage) {
-        let toastTitle = "Animation Error";
-        let toastDescription = flowErrorMessage;
-        let toastVariant: "default" | "destructive" = "destructive";
-        let uiErrorToDisplay = flowErrorMessage;
-
-        if (flowErrorType === 'AI_DID_NOT_RETURN_IMAGE') {
-          console.warn('[GenerateAnimatedFrame] AI Flow Info (Model did not return image):', flowErrorMessage);
-          toastTitle = "AI Image Not Generated";
-          toastDescription = "The AI couldn't create an image for this request. This can happen sometimes. You could try again, perhaps with different text or a slightly different image.";
-          toastVariant = "default";
-          uiErrorToDisplay = toastDescription; 
-        } else if (flowErrorType === 'AI_API_ERROR') {
-          console.error('[GenerateAnimatedFrame] AI API Error:', flowErrorMessage);
-        } else { 
-          console.error('[GenerateAnimatedFrame] AI Flow Exception or other error:', flowErrorMessage);
-        }
+      if (generatedFrameDataUri) {
+        setAnimatedFramePreview(generatedFrameDataUri);
+        setAnimationError(null); 
+      } else if (aiErrorMessage) {
+        userFriendlyAiMessage = aiErrorType === 'AI_DID_NOT_RETURN_IMAGE' ?
+            "The AI couldn't create an image for this request. This can happen sometimes. You could try again, perhaps with different text or a slightly different image."
+            : aiErrorMessage;
         
-        setAnimationError(uiErrorToDisplay);
-        toast({ title: toastTitle, description: toastDescription, variant: toastVariant });
+        if (aiErrorType === 'AI_DID_NOT_RETURN_IMAGE') {
+            console.warn('[GenerateAnimatedFrame] AI Flow Info (Model did not return image):', aiErrorMessage);
+        } else {
+            console.error(`[GenerateAnimatedFrame] AI Flow Error (${aiErrorType || 'Unknown'}):`, aiErrorMessage);
+        }
+        setAnimationError(userFriendlyAiMessage);
+        setAnimatedFramePreview(null);
         setActiveDisplayFrame(imagePreviewRef.current); 
       } else { 
         const unexpectedMsg = "AI frame generation completed without an image or a specific error message.";
         console.warn('[GenerateAnimatedFrame] Unexpected outcome from AI flow:', unexpectedMsg);
         setAnimationError(unexpectedMsg);
-        toast({ title: "Animation Issue", description: unexpectedMsg, variant: "default" });
+        userFriendlyAiMessage = unexpectedMsg;
+        setAnimatedFramePreview(null);
         setActiveDisplayFrame(imagePreviewRef.current); 
+      }
+
+      // --- Attempt Speech ---
+      if (isSpeechSupported && textToSpeakForFrame) {
+        setTimeout(() => {
+          if (currentFrameAudioTextRef.current !== textToSpeakForFrame) {
+            return; 
+          }
+
+          let toastDesc = "Speaking...";
+          let toastTitle = "AI Frame Ready!";
+          let toastVariant: "default" | "destructive" = "default";
+
+          if (generatedFrameDataUri) {
+            // Already set: toastTitle = "AI Frame Ready!"; description will be "Speaking..."
+          } else if (aiErrorMessage) { // Image generation had an issue
+            toastTitle = aiErrorType === 'AI_DID_NOT_RETURN_IMAGE' ? "AI Image Not Generated" : "Animation Error";
+            toastDesc = `${userFriendlyAiMessage || aiErrorMessage}. Now speaking the text.`;
+            toastVariant = aiErrorType === 'AI_DID_NOT_RETURN_IMAGE' ? "default" : "destructive";
+          } else { // No image, no specific error message from flow, but speaking
+            toastTitle = "Speaking Text";
+            toastDesc = "Playing audio. Frame generation had an unexpected outcome.";
+          }
+          toast({ title: toastTitle, description: toastDesc, variant: toastVariant, duration: generatedFrameDataUri ? 3000: 5000 });
+
+
+          const utterance = new SpeechSynthesisUtterance(textToSpeakForFrame!);
+          utterance.onstart = () => {
+              setIsSpeaking(true); 
+              setSpeakingText(textToSpeakForFrame); 
+              setIsSimulatedClonedVoiceSpeaking(false);
+              if(animatedFramePreviewRef.current && !animationErrorRef.current) {
+                  startFlickerAnimation();
+              } else {
+                  setActiveDisplayFrame(imagePreviewRef.current); 
+                  stopFlickerAnimation(); 
+              }
+          };
+          utterance.onend = () => {
+              setIsSpeaking(false);
+              setSpeakingText(null);
+              stopFlickerAnimation();
+          };
+          utterance.onerror = (event) => {
+              const speechErrorMsg = `Speech error: ${event.error || 'unknown'}`;
+              console.error('[GenerateAnimatedFrame] Speech Synthesis Error:', speechErrorMsg);
+              if (!animationErrorRef.current) { 
+                  setAnimationError(speechErrorMsg);
+                  toast({ title: "Speech Error", description: `Could not play speech. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
+              } else {
+                  toast({ title: "Speech Error during Animation", description: `Speech failed. (Error: ${event.error || 'unknown'})`, variant: "destructive" });
+              }
+              setIsSpeaking(false);
+              setSpeakingText(null);
+              stopFlickerAnimation();
+          };
+          window.speechSynthesis.speak(utterance);
+        }, 100); 
+      } else if (textToSpeakForFrame) { // Speech not supported but text is available
+          let toastDesc = "Browser speech not supported for playback.";
+          let toastTitle = "AI Frame Ready";
+          let toastVariant: "default" | "destructive" = "default";
+
+          if (generatedFrameDataUri) {
+            // Title and desc are fine.
+          } else if (aiErrorMessage) {
+            toastTitle = aiErrorType === 'AI_DID_NOT_RETURN_IMAGE' ? "AI Image Not Generated" : "Animation Error";
+            toastDesc = `${userFriendlyAiMessage || aiErrorMessage}. Browser speech not supported.`;
+            toastVariant = aiErrorType === 'AI_DID_NOT_RETURN_IMAGE' ? "default" : "destructive";
+          } else {
+            toastTitle = "Text Ready";
+            toastDesc = "Browser speech not supported. Frame generation had an unexpected outcome.";
+          }
+          toast({ title: toastTitle, description: toastDesc, variant: toastVariant });
+          
+          if (generatedFrameDataUri) setActiveDisplayFrame(generatedFrameDataUri); 
+          else if (imagePreviewRef.current) setActiveDisplayFrame(imagePreviewRef.current);
       }
     } catch (error: any) { 
       console.error('[GenerateAnimatedFrame] General client-side processing error:', error);
       const message = error.message || "An unexpected client-side error occurred during frame generation.";
       setAnimationError(message);
       toast({ title: "Client Error", description: message, variant: "destructive" });
+      setAnimatedFramePreview(null);
       setActiveDisplayFrame(imagePreviewRef.current); 
     } finally {
       setIsGeneratingFrame(false);
+      // This logic runs after speech might have started and set its own display state or flicker.
+      // It aims to set a stable display if nothing is actively happening.
       const speechNotRunningOrErrorOccurred = !(isSpeakingRef.current && speakingTextRef.current === currentFrameAudioTextRef.current) || animationErrorRef.current;
-      if (speechNotRunningOrErrorOccurred && !isFlickerAnimationActive) { 
+      
+      if (speechNotRunningOrErrorOccurred && !isFlickerAnimationActive && !isGeneratingFrame) { 
         if (animationErrorRef.current && imagePreviewRef.current) {
           setActiveDisplayFrame(imagePreviewRef.current);
         } else if (animatedFramePreviewRef.current) {

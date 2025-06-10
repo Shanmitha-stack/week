@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Sparkles, Video } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame, type GenerateAnimatedFrameOutput } from '@/ai/flows/generate-animated-frame-flow';
+import AudioPlayer from '@/components/AudioPlayer';
 
 
 export default function Home() {
@@ -33,11 +34,10 @@ export default function Home() {
 
   const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
 
-  // State for AI Animated Output section (now using mock video with audio)
   const [isGeneratingVideoOutput, setIsGeneratingVideoOutput] = useState<boolean>(false);
   const [aiStillFrameUrl, setAiStillFrameUrl] = useState<string | null>(null);
-  const [mockVideoUrl, setMockVideoUrl] = useState<string | null>(null);
-  const [videoOutputError, setVideoOutputError] = useState<string | null>(null);
+  const [mockVideoUrl, setMockVideoUrl] = useState<string | null>(null); // Renamed from mockAudioUrl for clarity
+  const [videoOutputError, setVideoOutputError] = useState<string | null>(null); // Renamed from mockAudioError
   
   const { toast } = useToast();
 
@@ -48,8 +48,6 @@ export default function Home() {
   const speakingTextRef = useRef(speakingText);
   const imagePreviewRef = useRef<string | null>(null);
 
-  // Refs related to old flicker animation are no longer needed for the video output section
-  // but might be used by other sections if re-introduced there.
 
   useEffect(() => {
     imagePreviewRef.current = imagePreview;
@@ -58,7 +56,6 @@ export default function Home() {
       setMockVideoUrl(null);
       setVideoOutputError(null);
     } else {
-      // If a new image is uploaded, clear previous outputs for the video section
       setAiStillFrameUrl(null);
       setMockVideoUrl(null);
       setVideoOutputError(null);
@@ -475,10 +472,10 @@ export default function Home() {
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
 
-    toast({ title: "Generating Output...", description: "AI is creating an expressive frame and fetching mock video..." });
+    toast({ title: "Generating Output...", description: "AI is creating an expressive frame and fetching mock audio source..." });
   
     let aiFrameResult: GenerateAnimatedFrameOutput | null = null;
-    let fetchedMockVideoUrl: string | null = null;
+    let fetchedMockVideoUrl: string | null = null; // Store the fetched URL locally
     let combinedErrorMessages: string[] = [];
 
     try {
@@ -510,31 +507,31 @@ export default function Home() {
         combinedErrorMessages.push(`AI Frame: ${message}`);
       }
 
-      // 2. Fetch Mock Video URL
+      // 2. Fetch Mock Video URL (for audio)
       try {
         const formData = new FormData();
-        formData.append('image', selectedImage); // selectedImage should be File object
+        formData.append('image', selectedImage); 
         formData.append('textToSpeak', textToUse);
 
-        const response = await fetch('/api/true-lip-sync-video', {
+        const response = await fetch('/api/true-lip-sync-video', { // This API returns a video URL
           method: 'POST',
           body: formData,
         });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}` }));
-          throw new Error(errorData.message || `Failed to fetch mock video. Status: ${response.status}`);
+          throw new Error(errorData.message || `Failed to fetch mock audio source. Status: ${response.status}`);
         }
         const data = await response.json();
-        if (data.videoUrl) {
-          setMockVideoUrl(data.videoUrl);
+        if (data.videoUrl) { // The API returns 'videoUrl'
+          setMockVideoUrl(data.videoUrl); // Set state for the AudioPlayer
           fetchedMockVideoUrl = data.videoUrl;
         } else {
-          combinedErrorMessages.push("Mock Video: API did not return a video URL.");
+          combinedErrorMessages.push("Mock Audio Source: API did not return a video URL.");
         }
-      } catch (videoError: any) {
-        console.error('[GenerateVideoOutput] Error fetching mock video URL:', videoError);
-        combinedErrorMessages.push(`Mock Video: ${videoError.message || "Failed to fetch mock video URL."}`);
+      } catch (audioFetchError: any) {
+        console.error('[GenerateVideoOutput] Error fetching mock audio source URL:', audioFetchError);
+        combinedErrorMessages.push(`Mock Audio Source: ${audioFetchError.message || "Failed to fetch mock audio source URL."}`);
       }
 
       // 3. Set overall error and toast
@@ -547,30 +544,29 @@ export default function Home() {
           variant: "destructive",
           duration: 7000 
         });
-      } else if (aiStillFrameUrl && fetchedMockVideoUrl) {
+      } else if (aiStillFrameUrl && fetchedMockVideoUrl) { // Check fetchedMockVideoUrl, not mockVideoUrl state directly due to async nature
          toast({ 
           title: "Output Ready!", 
-          description: "AI expressive frame generated and mock video with audio is ready.",
+          description: "AI expressive frame generated and mock audio source is ready.",
           duration: 4000 
         });
       } else if (aiStillFrameUrl) {
         toast({
-          title: "Frame Ready, Video Issue",
-          description: "AI expressive frame is ready, but there was an issue fetching the mock video.",
+          title: "Frame Ready, Audio Issue",
+          description: "AI expressive frame is ready, but there was an issue fetching the mock audio source.",
           variant: "default",
           duration: 5000
         });
       } else if (fetchedMockVideoUrl) {
          toast({
-          title: "Video Ready, Frame Issue",
-          description: "Mock video is ready, but there was an issue generating the AI expressive frame.",
+          title: "Audio Source Ready, Frame Issue",
+          description: "Mock audio source is ready, but there was an issue generating the AI expressive frame.",
           variant: "default",
           duration: 5000
         });
       }
 
-
-    } catch (error: any) { // Catch any other unexpected errors during orchestration
+    } catch (error: any) { 
       console.error('[GenerateVideoOutput] General client-side processing error:', error);
       const message = error.message || "An unexpected client-side error occurred.";
       setVideoOutputError(message);
@@ -718,14 +714,13 @@ export default function Home() {
             </div>
           </SectionCard>
 
-          <SectionCard title="AI Animated Output (Mock Video with Audio)" icon={<Video className="text-primary" />}>
+          <SectionCard title="AI Animated Output (Mock Audio from Video Source)" icon={<Video className="text-primary" />}>
             <div className="space-y-4">
                <div>
                 <Label htmlFor="video-output-info" className="text-base">Image &amp; Audio Source for Output:</Label>
                  {imagePreview ? (
                     <p className="text-sm text-muted-foreground mt-1" id="video-output-info">
-                      Using your uploaded image and text from "Prepared Text" or "Mock Cloned Audio".
-                      AI will generate an expressive still frame. A mock video with its own audio will be played below.
+                      Using your uploaded image. AI will generate an expressive still frame. Audio from a mock video source will be played.
                     </p>
                   ) : (
                     <p className="text-sm text-muted-foreground mt-1" id="video-output-info">
@@ -740,8 +735,8 @@ export default function Home() {
                 className="w-full sm:w-auto"
               >
                 {isGeneratingVideoOutput ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 
-                 <Video className="mr-2 h-4 w-4" />}
-                Generate Animated Output (Mock Video)
+                 <Sparkles className="mr-2 h-4 w-4" />} {/* Changed icon for this button */}
+                Generate Animated Output
               </Button>
               
               <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow relative min-h-[250px] space-y-6">
@@ -787,34 +782,40 @@ export default function Home() {
                 
                 <div>
                     <Label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-2">
-                        <Video className="h-5 w-5"/>
-                        Mock Animated Video (with Audio):
+                        <Volume2 className="h-5 w-5"/>
+                        Mock Audio Output (from Video Source):
                     </Label>
-                    <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden min-h-[200px] max-h-[300px] relative">
+                    <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden min-h-[200px] max-h-[300px] relative p-2"> {/* Added padding for AudioPlayer */}
                         {isGeneratingVideoOutput && !mockVideoUrl && !videoOutputError && aiStillFrameUrl ? (
                              <div className="flex flex-col items-center justify-center text-center p-4">
                                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-                                <p className="text-lg font-semibold text-white">Fetching Mock Video...</p>
+                                <p className="text-lg font-semibold text-white">Fetching Mock Audio Source...</p>
                              </div>
-                        ) : mockVideoUrl ? (
-                            <video
-                                key={mockVideoUrl} // Ensures re-render if URL changes
-                                controls
-                                autoPlay
-                                src={mockVideoUrl}
-                                className="w-full h-full rounded-md"
-                                onError={(e) => {
-                                    console.error("Video player error:", e);
-                                    setVideoOutputError(prev => prev ? `${prev} | Video playback error.` : 'Video playback error.');
-                                    toast({title: "Video Error", description: "Could not play the mock video.", variant: "destructive"});
-                                }}
-                            >
-                                Your browser does not support the video tag.
-                            </video>
+                        ) : mockVideoUrl && !videoOutputError ? (
+                           <AudioPlayer
+                              src={mockVideoUrl}
+                              autoPlay
+                              onPlayerError={(audioErrorMessage) => {
+                                setVideoOutputError(prev => {
+                                  const newError = `Audio Playback: ${audioErrorMessage.replace(/^AudioPlayer: /, '')}`;
+                                  return prev ? `${prev} | ${newError}` : newError;
+                                });
+                                toast({
+                                  title: "Audio Playback Issue",
+                                  description: audioErrorMessage.replace(/^AudioPlayer: /, ''),
+                                  variant: "destructive",
+                                  duration: 7000,
+                                });
+                              }}
+                            />
                         ) : (
                             <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
-                                <Video className="h-12 w-12 mb-4 text-muted-foreground/50" data-ai-hint="video placeholder" />
-                                <p className="text-lg font-semibold">Mock video will appear here</p>
+                                <Volume2 className="h-12 w-12 mb-4 text-muted-foreground/50" data-ai-hint="audio placeholder" />
+                                <p className="text-lg font-semibold">
+                                    {videoOutputError && (videoOutputError.includes("Mock Audio Source") || videoOutputError.includes("Audio Playback")) 
+                                      ? "Could not load audio" 
+                                      : "Mock audio player will appear here"}
+                                </p>
                             </div>
                         )}
                     </div>
@@ -828,7 +829,7 @@ export default function Home() {
                 )}
                  <p className="text-xs text-muted-foreground mt-2 italic">
                     This feature uses AI to generate an expressive still image. 
-                    A separate mock video with its own audio track (e.g., a generic sample video) is then played.
+                    Audio from a separate mock video source is then played.
                   </p>
               </div>
             </div>
@@ -841,4 +842,3 @@ export default function Home() {
     </div>
   );
 }
-

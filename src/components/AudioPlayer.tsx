@@ -10,9 +10,10 @@ import { Slider } from '@/components/ui/slider';
 interface AudioPlayerProps {
   src: string | null;
   autoPlay?: boolean;
+  onPlayerError?: (message: string) => void;
 }
 
-const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
+const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false, onPlayerError }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -23,12 +24,11 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
   const [prevVolume, setPrevVolume] = useState(0.5);
 
   useEffect(() => {
-    // Treat null, undefined, or empty/whitespace-only src as invalid
     if (src && src.trim() !== "") {
       const newAudio = new Audio(src);
       audioRef.current = newAudio;
       setIsLoading(true);
-      setIsPlaying(false);
+      setIsPlaying(false); // Reset playing state for new src
       setCurrentTime(0);
       setDuration(0);
 
@@ -45,26 +45,62 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
         setCurrentTime(0);
         if (audioRef.current) audioRef.current.currentTime = 0;
       };
+      
+      const handlePlayEvent = () => setIsPlaying(true);
+      const handlePauseEvent = () => setIsPlaying(false);
+
       const handleCanPlayThrough = () => {
         setIsLoading(false);
         if (autoPlay && audioRef.current) {
-          audioRef.current.play().catch(error => console.error("AudioPlayer: Autoplay failed:", error));
-          setIsPlaying(true);
+          audioRef.current.play()
+            .then(() => {
+              // isPlaying will be set by the 'play' event listener
+            })
+            .catch(error => {
+              console.error("AudioPlayer: Autoplay failed:", error);
+              setIsPlaying(false); // Ensure isPlaying is false if autoplay promise rejects
+              if (onPlayerError) {
+                onPlayerError("AudioPlayer: Autoplay was prevented. Press play manually or check browser console.");
+              }
+            });
+        } else {
+           setIsPlaying(audioRef.current ? !audioRef.current.paused : false);
         }
       };
+
       const handleError = (e: Event) => {
         setIsLoading(false);
         const audioElement = e.target as HTMLAudioElement;
         const mediaError = audioElement.error;
-        console.error(
-          "AudioPlayer Error Details:",
-          {
+        let errorMessage = "AudioPlayer: An unknown error occurred loading the audio.";
+        if (mediaError) {
+          switch (mediaError.code) {
+            case MediaError.MEDIA_ERR_ABORTED:
+              errorMessage = "AudioPlayer: Playback aborted by the user or script.";
+              break;
+            case MediaError.MEDIA_ERR_NETWORK:
+              errorMessage = "AudioPlayer: A network error caused the audio download to fail.";
+              break;
+            case MediaError.MEDIA_ERR_DECODE:
+              errorMessage = "AudioPlayer: The audio playback was aborted due to a corruption problem or because the audio used features your browser did not support.";
+              break;
+            case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+              errorMessage = "AudioPlayer: The audio could not be loaded, either because the server or network failed or because the format is not supported.";
+              break;
+            default:
+              errorMessage = `AudioPlayer: An error occurred (Code: ${mediaError.code}, Message: ${mediaError.message || 'N/A'}).`;
+          }
+        }
+        console.error("AudioPlayer Error Details:", {
             code: mediaError?.code,
             message: mediaError?.message,
             currentSrc: audioElement.currentSrc,
-            srcAttempted: audioElement.src, // or just src prop value if needed
+            srcAttempted: src,
           }
         );
+        if (onPlayerError) {
+          onPlayerError(errorMessage);
+        }
       };
       const handleLoadStart = () => setIsLoading(true);
 
@@ -74,6 +110,8 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
       newAudio.addEventListener('canplaythrough', handleCanPlayThrough);
       newAudio.addEventListener('error', handleError);
       newAudio.addEventListener('loadstart', handleLoadStart);
+      newAudio.addEventListener('play', handlePlayEvent);
+      newAudio.addEventListener('pause', handlePauseEvent);
       
       newAudio.load();
 
@@ -84,30 +122,25 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
         newAudio.removeEventListener('canplaythrough', handleCanPlayThrough);
         newAudio.removeEventListener('error', handleError);
         newAudio.removeEventListener('loadstart', handleLoadStart);
+        newAudio.removeEventListener('play', handlePlayEvent);
+        newAudio.removeEventListener('pause', handlePauseEvent);
+
         if (audioRef.current) {
           audioRef.current.pause();
-          // It's good practice to remove the src to prevent further loading attempts by the browser for the old object
-          if (audioRef.current.src) { // Check if src is already set
-             try {
-                audioRef.current.src = ''; // Detach source
-             } catch (err) {
-                // some browsers might throw error when src is set to empty on unmounted element
-             }
-          }
-          audioRef.current.removeAttribute('src'); // More robust way to clear
-          audioRef.current.load(); // Abort pending/ongoing network requests for the audio element
+          try {
+            audioRef.current.src = ''; 
+          } catch (err) { /* ignore */ }
+          audioRef.current.removeAttribute('src'); 
+          audioRef.current.load(); 
           audioRef.current = null;
         }
       };
     } else {
-      // Handles null, undefined, or empty/whitespace-only src
       if (audioRef.current) {
         audioRef.current.pause();
-        if (audioRef.current.src) {
-           try {
-              audioRef.current.src = '';
-           } catch(err) {/* ignore */}
-        }
+        try {
+          audioRef.current.src = '';
+        } catch(err) {/* ignore */}
         audioRef.current.removeAttribute('src');
         audioRef.current.load();
         audioRef.current = null;
@@ -115,10 +148,10 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
       setIsPlaying(false);
       setDuration(0);
       setCurrentTime(0);
-      setIsLoading(false);
+      setIsLoading(false); // Set loading to false if src is invalid/cleared
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, autoPlay]); // autoPlay is a dependency
+  }, [src]); // autoPlay removed as direct dep, its effect is within handleCanPlayThrough
 
   useEffect(() => {
     if (audioRef.current) {
@@ -131,13 +164,18 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
     if (isPlaying) {
       audioRef.current.pause();
     } else {
-      audioRef.current.play().catch(console.error);
+      audioRef.current.play().catch(error => {
+        console.error("AudioPlayer: Playback failed on toggle:", error);
+        if (onPlayerError) {
+            onPlayerError("AudioPlayer: Could not start playback. Check browser console for details.");
+        }
+      });
     }
-    setIsPlaying(!isPlaying);
+    // isPlaying state will be updated by 'play'/'pause' event listeners
   };
 
   const handleSeek = (value: number[]) => {
-    if (audioRef.current && !isLoading && duration > 0) { // ensure duration is valid
+    if (audioRef.current && !isLoading && duration > 0) {
       const newTime = value[0];
       audioRef.current.currentTime = newTime;
       setCurrentTime(newTime);
@@ -175,12 +213,9 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
     return <Volume2 className="h-5 w-5" />;
   };
   
-  // Do not render if src is invalid AND not loading AND audioRef is not set
-  // This condition helps prevent rendering when the component is essentially inactive or errored early.
   if ((!src || src.trim() === "") && !isLoading && !audioRef.current) {
     return null;
   }
-
 
   return (
     <div className="flex items-center gap-3 p-3 border rounded-lg shadow-sm bg-card w-full">
@@ -190,7 +225,7 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
       <div className="flex-grow mx-2">
         <Slider
           value={[currentTime]}
-          max={duration > 0 ? duration : 1} // Prevent max 0 for slider
+          max={duration > 0 ? duration : 1} 
           step={0.1}
           onValueChange={handleSeek}
           disabled={isLoading || (!src || src.trim() === "") || duration === 0}
@@ -220,5 +255,3 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
 };
 
 export default AudioPlayer;
-
-    

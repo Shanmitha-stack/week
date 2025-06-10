@@ -1,7 +1,8 @@
 
 'use server';
 /**
- * @fileOverview Generates a mock "animated" frame from an input image using AI.
+ * @fileOverview Generates a mock "animated" frame from an input image using AI,
+ * aiming for natural and expressive speaking animations.
  * This is intended for UI demonstration purposes and does not perform actual video animation or lip-sync.
  *
  * - generateAnimatedFrame - A function that takes an image and a prompt to generate a new image.
@@ -21,7 +22,7 @@ const GenerateAnimatedFrameInputSchema = z.object({
   animationPrompt: z
     .string()
     .describe(
-      'A text prompt to guide the generation of the new frame, e.g., "Generate an image of this person smiling slightly, as a frame from a video."'
+      'A text prompt to guide the generation of a new, expressive image frame. The prompt should encourage the AI to generate a natural speaking expression, potentially with emotion, suitable for the provided text, as if it\'s a frame from a video. E.g., "Generate an image of this person speaking with a happy expression, as a frame from a video."'
     ),
 });
 export type GenerateAnimatedFrameInput = z.infer<typeof GenerateAnimatedFrameInputSchema>;
@@ -77,3 +78,4 @@ const generateAnimatedFrameFlow = ai.defineFlow(
     }
   }
 );
+

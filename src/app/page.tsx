@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Image as ImageIcon, Film, VideoOff } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Image as ImageIcon, Film } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame, GenerateAnimatedFrameInput } from '@/ai/flows/generate-animated-frame-flow';
 
@@ -628,7 +628,7 @@ export default function Home() {
     try {
       toast({ title: "Starting AI Frame Generation", description: "Generating animated frame with AI..." });
       
-      const animationPrompt = `Generate an image of this person as if they are speaking the words: "${textToSpeakForAnimation.substring(0, 50)}${textToSpeakForAnimation.length > 50 ? "..." : ""}". The style should be consistent with the input image. Ensure the person's mouth is appropriately shaped for speech.`;
+      const animationPrompt = `Generate a frame of this person as if they are naturally speaking the words: "${textToSpeakForAnimation.substring(0, 70)}${textToSpeakForAnimation.length > 70 ? "..." : ""}". The image should capture a natural and engaging speaking expression, conveying appropriate emotion for the text. Ensure the facial expression and mouth shape are consistent with someone actively speaking these words, as if it's a still frame from a video. Maintain the original person's likeness and the image style.`;
       
       const input: GenerateAnimatedFrameInput = {
         originalImageDataUri: imagePreviewRef.current, 

@@ -10,9 +10,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff, AlertTriangle, Info } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, Video, VideoOff, AlertTriangle, Info } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
-// import { generateAnimatedFrame } from '@/ai/flows/generate-animated-frame-flow'; // Removed as we now aim for backend video generation
+
 
 export default function Home() {
   const [textInput, setTextInput] = useState<string>('');
@@ -560,12 +560,10 @@ export default function Home() {
       formData.append('textToSpeak', textToSpeakForVideo);
 
       console.log('[handleGenerateVideo] Sending request to /api/true-lip-sync-video');
-      // Replace with your actual backend API endpoint
+      
       const response = await fetch('/api/true-lip-sync-video', { 
         method: 'POST',
         body: formData,
-        // Add headers if your backend requires them, e.g., for authentication
-        // headers: { 'Authorization': 'Bearer YOUR_TOKEN' } 
       });
 
       if (!response.ok) {
@@ -573,15 +571,13 @@ export default function Home() {
         try {
           errorData = await response.json();
         } catch (e) {
-          // Ignore if response is not JSON
+          console.warn('[handleGenerateVideo] Could not parse JSON from error response. This is common for 404 errors if the server sends HTML/text instead of JSON.');
         }
-        const errorMessage = errorData?.message || `Backend error: ${response.status} ${response.statusText}`;
-        console.error('[handleGenerateVideo] Backend request failed:', errorMessage, errorData);
+        const errorMessage = errorData?.message || `Backend error: ${response.status} ${response.statusText || 'Status text unavailable'}`;
+        console.error('[handleGenerateVideo] Backend request failed:', errorMessage, ...(errorData ? [errorData] : [`Status: ${response.status}`]));
         setVideoGenerationError(errorMessage);
         toast({ title: "Video Generation Failed", description: errorMessage, variant: "destructive" });
-        // Optionally, set a fallback placeholder if you have one for videos
-        // setGeneratedVideoUrl("path_to_fallback_video_or_image.mp4"); 
-        return; // Exit early on failure
+        return;
       }
 
       const result = await response.json();
@@ -598,7 +594,7 @@ export default function Home() {
       }
 
     } catch (error: any) {
-      console.error("[handleGenerateVideo] CRITICAL ERROR in try block:", error);
+      console.error("[handleGenerateVideo] CRITICAL ERROR in try block (e.g., network issue):", error);
       const message = error.message || "An unexpected error occurred during video generation.";
       setVideoGenerationError(message);
       toast({ title: "Video Generation Error", description: message, variant: "destructive" });
@@ -751,7 +747,7 @@ export default function Home() {
           </SectionCard>
 
 
-          <SectionCard title="Face Preprocessing + Lip Sync Video (Audio + Image → Talking Face)" icon={<Smile className="text-primary" />} >
+          <SectionCard title="Face Preprocessing + Lip Sync Video (Audio + Image → Talking Face)" icon={<Video className="text-primary" />} >
             <div className="space-y-4">
               <div>
                 <Label htmlFor="animation-image-source" className="text-base">Image Source for Animation:</Label>
@@ -799,9 +795,9 @@ export default function Home() {
               <div className="mt-4 p-3 border rounded-md bg-accent/10 text-accent-foreground/80 text-sm flex items-start gap-2">
                 <Info className="h-5 w-5 mt-0.5 shrink-0 text-accent" />
                 <p>
-                  This feature attempts to call a backend service to generate a lip-synced video.
+                  This feature attempts to call a backend service (at <code>/api/true-lip-sync-video</code>) to generate a lip-synced video.
                   True video lip-sync (like that produced by models such as Wav2Lip or SadTalker) requires a dedicated backend service, which is not implemented in this demonstration frontend. 
-                  The button above will try to make an API call to a placeholder endpoint.
+                  The button above will try to make an API call to this placeholder endpoint. If the endpoint doesn't exist (as is currently the case), a '404 Not Found' error will occur, which is expected.
                 </p>
               </div>
 
@@ -858,5 +854,3 @@ export default function Home() {
     </div>
   );
 }
-
-    

@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff, AlertTriangle } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, Smile, Video, VideoOff, AlertTriangle, Info } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame } from '@/ai/flows/generate-animated-frame-flow';
 
@@ -560,7 +560,7 @@ export default function Home() {
       toast({ title: "Starting Mock Animation Process", description: "Preprocessing face image (simulated)..." });
       await new Promise(resolve => setTimeout(resolve, 1000)); 
 
-      let animationCreativePrompt = `Generate a single, still image frame of the person in the provided photo. The person should appear as if they are actively speaking or in the middle of a natural conversation. Critically, ensure the entire face is clearly visible and maintain a framing similar to the original input photo. Avoid extreme close-ups of any single feature.`;
+      let animationCreativePrompt = `Generate a single, still image frame of the person in the provided photo. The person should appear as if they are actively speaking or in the middle of a natural conversation. Critically, ensure the entire face is clearly visible and maintain a framing similar to the original input photo. Avoid extreme close-ups of any single feature like the lips.`;
       const audioTextContext = (audioSourceForAnimationLogic === "simulated cloned audio" && textForSimulatedClonedVoice)
         ? textForSimulatedClonedVoice
         : ((audioSourceForAnimationLogic === "prepared speech text" && preparedSpeechText) ? preparedSpeechText : "");
@@ -834,6 +834,14 @@ export default function Home() {
                   To enable animation: Ensure an image is uploaded in the first section, and that audio has been prepared (either via "Process Input for Speech" or "Generate Speech with Cloned Voice (Mock)").
                 </p>
               )}
+
+              <div className="mt-4 p-3 border rounded-md bg-accent/10 text-accent-foreground/80 text-sm flex items-start gap-2">
+                <Info className="h-5 w-5 mt-0.5 shrink-0 text-accent" />
+                <p>
+                  This feature demonstrates a mock animation. It generates a single, AI-created still image intended to look like the person is speaking, and then auto-plays the selected audio. 
+                  True video lip-sync (like that produced by models such as Wav2Lip or SadTalker) requires a dedicated backend service, which is not implemented in this demonstration.
+                </p>
+              </div>
 
 
               <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">

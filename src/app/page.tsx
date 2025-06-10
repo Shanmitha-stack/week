@@ -514,7 +514,8 @@ export default function Home() {
 
 
   const handleAnimateFace = useCallback(async () => {
-    setImageLoadError(null); // Reset image load error state
+    console.log('[handleAnimateFace] START. States:', { selectedImageName: selectedImage?.name, imagePreviewAvailable: !!imagePreview, isAnimatingFace, mockVideoPlayerImage_exists: !!mockVideoPlayerImage });
+    setImageLoadError(null); 
 
     const currentHasPreparedTextAudio = preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && !preparedSpeechText.toLowerCase().startsWith("error:");
     const currentHasSimulatedClonedAudio = !!(textForSimulatedClonedVoice && textForSimulatedClonedVoice.trim() !== "");
@@ -522,9 +523,7 @@ export default function Home() {
       ? "simulated cloned audio"
       : (currentHasPreparedTextAudio ? "prepared speech text" : null);
 
-    console.log('[handleAnimateFace] Initiated. States:', {
-      selectedImageName: selectedImage?.name,
-      imagePreviewAvailable: !!imagePreview,
+    console.log('[handleAnimateFace] Intermediate States:', {
       preparedSpeechTextValue: preparedSpeechText ? preparedSpeechText.substring(0, 50) + '...' : null,
       textForSimulatedClonedVoiceValue: textForSimulatedClonedVoice ? textForSimulatedClonedVoice.substring(0, 50) + '...' : null,
       selectedVoiceSampleName: selectedVoiceSample?.name,
@@ -600,7 +599,8 @@ export default function Home() {
                   handlePlaySimulatedClonedVoice();
                   playedAudio = true;
                 } else {
-                  console.warn('[handleAnimateFace auto-play] Intended "simulated cloned audio" source became unavailable.');
+                  console.warn('[handleAnimateFace auto-play] Intended "simulated cloned audio" source became unavailable for playback.');
+                  toast({ title: "Auto-play Skipped", description: "Simulated cloned audio for animation was not ready for playback.", variant: "default" });
                 }
               } else if (audioSourceForAnimationLogic === "prepared speech text") {
                 if (canPlayPrepared) {
@@ -608,13 +608,13 @@ export default function Home() {
                   handleSpeakPreparedText();
                   playedAudio = true;
                 } else {
-                  console.warn('[handleAnimateFace auto-play] Intended "prepared speech text" source became unavailable.');
+                  console.warn('[handleAnimateFace auto-play] Intended "prepared speech text" source became unavailable for playback.');
+                   toast({ title: "Auto-play Skipped", description: "Prepared speech text for animation was not ready for playback.", variant: "default" });
                 }
               }
 
-              if (!playedAudio) {
-                console.log('[handleAnimateFace] Auto-play: Intended audio source for animation was not available at playback time.');
-                toast({ title: "Auto-play Skipped", description: "The audio intended for animation was not ready for playback.", variant: "default" });
+              if (!playedAudio && audioSourceForAnimationLogic) { // Check audioSourceForAnimationLogic to avoid toast if it was null initially
+                console.log('[handleAnimateFace] Auto-play: Intended audio source for animation was not available at playback time, or no audio source was set.');
               }
             }, 200);
         }
@@ -625,7 +625,7 @@ export default function Home() {
         setMockVideoPlayerImage(fallbackUrl); 
         toast({ title: "Mock Frame Generation Failed", description: frameResult.errorMessage || "Could not generate AI frame, using fallback.", variant: "destructive" });
       }
-      console.log('[handleAnimateFace] Mock processing complete.');
+      console.log('[handleAnimateFace] Mock processing complete. mockVideoPlayerImage should be set to:', mockVideoPlayerImage ? 'a value' : 'null/undefined');
 
     } catch (error: any) {
       const fallbackUrlOnError = `https://placehold.co/640x360.png?t=${Date.now()}&err=hc`;
@@ -634,22 +634,22 @@ export default function Home() {
       console.log('[handleAnimateFace] Setting fallback due to CRITICAL ERROR. Fallback URL:', fallbackUrlOnError);
       setMockVideoPlayerImage(fallbackUrlOnError);
     } finally {
-      console.log('[handleAnimateFace] In finally block. Setting isAnimatingFace to false.');
+      console.log('[handleAnimateFace] In finally block. Setting isAnimatingFace to false. Current mockVideoPlayerImage (before setIsAnimatingFace(false)):', mockVideoPlayerImage ? 'set' : 'not set');
       setIsAnimatingFace(false);
     }
-  }, [selectedImage, imagePreview, toast, preparedSpeechText, textForSimulatedClonedVoice, selectedVoiceSample, handlePlaySimulatedClonedVoice, handleSpeakPreparedText, isSpeechSupported]);
+  }, [selectedImage, imagePreview, toast, preparedSpeechText, textForSimulatedClonedVoice, selectedVoiceSample, handlePlaySimulatedClonedVoice, handleSpeakPreparedText, isSpeechSupported, mockVideoPlayerImage]);
 
   const currentPreparedTextIsSpeaking = isSpeaking && speakingText === preparedSpeechText && preparedSpeechText !== null;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && !!textForSimulatedClonedVoice;
 
   console.log('[Home render] States before JSX:', {
     isAnimatingFace,
-    mockVideoPlayerImage: mockVideoPlayerImage ? mockVideoPlayerImage.substring(0,100) + "..." : null,
+    mockVideoPlayerImage_value: mockVideoPlayerImage ? mockVideoPlayerImage.substring(0,100) + "..." : null,
     imageLoadError,
     isGeneratingSpeech,
     isCloningVoice,
-    preparedSpeechText: preparedSpeechText ? preparedSpeechText.substring(0,50) + "..." : null,
-    textForSimulatedClonedVoice: textForSimulatedClonedVoice ? textForSimulatedClonedVoice.substring(0,50) + "..." : null,
+    preparedSpeechText_value: preparedSpeechText ? preparedSpeechText.substring(0,50) + "..." : null,
+    textForSimulatedClonedVoice_value: textForSimulatedClonedVoice ? textForSimulatedClonedVoice.substring(0,50) + "..." : null,
   });
 
   return (
@@ -672,6 +672,7 @@ export default function Home() {
                   placeholder="Type or paste your text here..."
                   rows={4}
                   className="text-base mt-1"
+                  disabled={isAnimatingFace}
                 />
               </div>
               <div className="space-y-2">
@@ -685,6 +686,7 @@ export default function Home() {
                   accept="image/*"
                   onChange={handleImageChange} 
                   className="text-base file:text-primary file:font-medium"
+                  disabled={isAnimatingFace}
                 />
                 {imagePreview && (
                   <div className="mt-2 border rounded-md p-2 inline-block bg-muted/30">
@@ -853,21 +855,23 @@ export default function Home() {
                       className="object-contain w-full h-full"
                       data-ai-hint={
                         mockVideoPlayerImage.startsWith('data:image') ? "ai portrait" :
-                        (mockVideoPlayerImage.includes('ai_fail=1') ? "generic error placeholder" :
-                        (mockVideoPlayerImage.includes('err=hc') ? "generic error placeholder" : 
-                        (mockVideoPlayerImage.includes('img_err=1') ? "generic error placeholder" : "generic placeholder")))
+                        (mockVideoPlayerImage.includes('ai_fail=1') ? "ai error placeholder" :
+                        (mockVideoPlayerImage.includes('err=hc') ? "critical error placeholder" : 
+                        (mockVideoPlayerImage.includes('img_load_err=1') ? "image load error placeholder" : "generic placeholder")))
                       }
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
-                        console.error('Next/Image Error loading src:', target.src);
+                        console.error('[Next/Image OnError] Error loading src:', target.src, 'Full event:', e);
                         setImageLoadError('Error loading the generated/fallback image. A fallback placeholder is shown.');
-                        // Force a known good fallback if the AI image or initial fallback fails to load via next/image
-                        if (!mockVideoPlayerImage || !mockVideoPlayerImage.includes('placehold.co')) {
+                        
+                        if (!mockVideoPlayerImage || !mockVideoPlayerImage.includes('img_load_err=1')) { // Avoid loop if this specific fallback also fails
+                           console.log('[Next/Image OnError] Attempting to set image to forced img_load_err=1 fallback.');
                            setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}&img_load_err=1`);
                         }
                       }}
                       onLoad={() => {
-                        setImageLoadError(null); // Clear error on successful load
+                        console.log('[Next/Image OnLoad] Successfully loaded src:', mockVideoPlayerImage ? mockVideoPlayerImage.substring(0,100) + "..." : "null");
+                        setImageLoadError(null); 
                       }}
                     />
                   ) : (

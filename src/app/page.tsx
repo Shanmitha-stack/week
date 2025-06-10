@@ -571,12 +571,19 @@ export default function Home() {
         try {
           errorData = await response.json();
         } catch (e) {
-          console.warn('[handleGenerateVideo] Could not parse JSON from error response.');
+           console.warn('[handleGenerateVideo] Could not parse JSON from error response. This is common for 404 errors if the server sends HTML/text instead of JSON.');
         }
-        const errorMessage = errorData?.message || `Backend error: ${response.status} ${response.statusText || 'Status text unavailable'}`;
-        console.error('[handleGenerateVideo] Backend request failed:', errorMessage, ...(errorData ? [errorData] : [`Status: ${response.status}`]));
-        setVideoGenerationError(errorMessage);
-        toast({ title: "Video Generation Failed", description: errorMessage, variant: "destructive" });
+        
+        // Special handling for expected 404 if the backend is just a placeholder
+        if (response.status === 404) {
+            console.warn('[handleGenerateVideo] Backend endpoint /api/true-lip-sync-video not found (404). This is expected if the backend is not implemented.');
+            // No toast, no error state for this specific expected 404
+        } else {
+            const errorMessage = errorData?.message || `Backend error: ${response.status} ${response.statusText || 'Status text unavailable'}`;
+            console.error('[handleGenerateVideo] Backend request failed:', errorMessage, ...(errorData ? [errorData] : [`Status: ${response.status}`]));
+            setVideoGenerationError(errorMessage);
+            toast({ title: "Video Generation Failed", description: errorMessage, variant: "destructive" });
+        }
         return; 
       }
 
@@ -791,13 +798,13 @@ export default function Home() {
                   To enable video generation: Ensure an image is uploaded in the first section, and that audio text has been prepared (either via "Process Input for Speech" or "Generate Speech with Cloned Voice (Mock)").
                 </p>
               )}
-
-              <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow">
+              
+              <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow relative">
                 <Label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-2">
                   <Video className="h-5 w-5"/>
                   Video Animation Output:
                 </Label>
-                <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden min-h-[200px]">
+                <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden min-h-[200px] relative">
                   {isGeneratingVideo ? (
                     <div className="flex flex-col items-center justify-center text-center p-4">
                       <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -818,6 +825,15 @@ export default function Home() {
                         console.error('[Video Player] Error loading video:', generatedVideoUrl, e);
                         setVideoGenerationError('Error playing the generated video. The URL might be invalid or the video format unsupported.');
                       }}
+                    />
+                  ) : imagePreview ? (
+                     <Image
+                      src={imagePreview}
+                      alt="Uploaded image placeholder for video"
+                      fill
+                      style={{ objectFit: 'contain' }}
+                      className="rounded-md"
+                      data-ai-hint="uploaded image"
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
@@ -844,3 +860,5 @@ export default function Home() {
     </div>
   );
 }
+
+    

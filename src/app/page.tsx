@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, VideoOff, AlertTriangle, Image as ImageIcon, Film } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Image as ImageIcon, Film } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame, GenerateAnimatedFrameInput } from '@/ai/flows/generate-animated-frame-flow';
 
@@ -37,6 +37,8 @@ export default function Home() {
   const [animatedFramePreview, setAnimatedFramePreview] = useState<string | null>(null);
   const [animationError, setAnimationError] = useState<string | null>(null);
   
+  const [activeDisplayFrame, setActiveDisplayFrame] = useState<string | null>(null);
+  
   const { toast } = useToast();
 
   const isSpeakingRef = useRef(isSpeaking);
@@ -44,6 +46,18 @@ export default function Home() {
   const preparedSpeechTextRef = useRef(preparedSpeechText);
   const textForSimulatedClonedVoiceRef = useRef(textForSimulatedClonedVoice);
   const speakingTextRef = useRef(speakingText);
+
+  const imagePreviewRef = useRef<string | null>(null);
+  const animatedFramePreviewRef = useRef<string | null>(null);
+  const animationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    imagePreviewRef.current = imagePreview;
+  }, [imagePreview]);
+
+  useEffect(() => {
+    animatedFramePreviewRef.current = animatedFramePreview;
+  }, [animatedFramePreview]);
 
   useEffect(() => {
     isSpeakingRef.current = isSpeaking;
@@ -101,25 +115,35 @@ export default function Home() {
         }
         window.speechSynthesis.onvoiceschanged = null; 
       }
+      if (animationIntervalRef.current) {
+        clearInterval(animationIntervalRef.current);
+        animationIntervalRef.current = null;
+      }
       setIsSpeaking(false);
       setSpeakingText(null);
       setIsSimulatedClonedVoiceSpeaking(false);
     };
   }, []);
   
-  const resetAllOutputsDependentOnTextOrImage = () => {
+  const resetAllOutputsDependentOnTextOrImage = useCallback(() => {
     setPreparedSpeechText(null);
     setTextForSimulatedClonedVoice(null); 
     setAnimatedFramePreview(null);
     setAnimationError(null);
+    setActiveDisplayFrame(imagePreviewRef.current); // Reset to current uploaded image or null
+
+    if (animationIntervalRef.current) {
+      clearInterval(animationIntervalRef.current);
+      animationIntervalRef.current = null;
+    }
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
-        window.speechSynthesis.cancel();
+        window.speechSynthesis.cancel(); // This should trigger onend/onerror for utterance
     }
     setIsSpeaking(false);
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
-  };
+  }, []);
 
 
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -131,17 +155,20 @@ export default function Home() {
         const result = reader.result as string;
         setImagePreview(result);
         setAnimatedFramePreview(null); 
+        setActiveDisplayFrame(result); // Display the new uploaded image immediately
       };
       reader.onerror = () => {
         console.error("FileReader error when trying to load image.");
         setSelectedImage(null); 
         setImagePreview(null);
+        setActiveDisplayFrame(null);
         toast({ title: "Image Load Error", description: "Could not read the selected image file.", variant: "destructive" });
       }
       reader.readAsDataURL(file);
     } else {
       setSelectedImage(null);
       setImagePreview(null);
+      setActiveDisplayFrame(null);
     }
     resetAllOutputsDependentOnTextOrImage();
   };
@@ -171,8 +198,15 @@ export default function Home() {
     setIsGeneratingSpeech(true);
     setPreparedSpeechText(null); 
     setTextForSimulatedClonedVoice(null);
+    
     setAnimatedFramePreview(null);
     setAnimationError(null);
+    setActiveDisplayFrame(imagePreviewRef.current); // Reset display to current uploaded image
+    if (animationIntervalRef.current) {
+      clearInterval(animationIntervalRef.current);
+      animationIntervalRef.current = null;
+    }
+
 
     let imageDataUri: string | undefined = undefined;
     if (imagePreview && selectedImage) { 
@@ -342,8 +376,14 @@ export default function Home() {
     else setSelectedVoiceSample(null);
     
     setTextForSimulatedClonedVoice(null);
+    // Animation related resets
     setAnimatedFramePreview(null);
     setAnimationError(null);
+    setActiveDisplayFrame(imagePreviewRef.current); // Reset to current uploaded image
+     if (animationIntervalRef.current) {
+      clearInterval(animationIntervalRef.current);
+      animationIntervalRef.current = null;
+    }
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
         window.speechSynthesis.cancel();
@@ -398,6 +438,11 @@ export default function Home() {
     setTextForSimulatedClonedVoice(null); 
     setAnimatedFramePreview(null); 
     setAnimationError(null);
+    setActiveDisplayFrame(imagePreviewRef.current); // Reset display
+    if (animationIntervalRef.current) {
+      clearInterval(animationIntervalRef.current);
+      animationIntervalRef.current = null;
+    }
     
     try {
       await new Promise(resolve => setTimeout(resolve, 1000)); 
@@ -537,16 +582,17 @@ export default function Home() {
     }
 
     // Check if the button was clicked to STOP the currently playing animated frame's audio
-    if (isSpeakingRef.current && speakingTextRef.current === textToSpeakForAnimation && animatedFramePreview) {
+    if (isSpeakingRef.current && speakingTextRef.current === textToSpeakForAnimation && animatedFramePreviewRef.current) {
         console.log('[handleGenerateAnimatedFrameAndSpeak] Action: STOP speaking for animated frame.');
-        window.speechSynthesis.cancel();
+        window.speechSynthesis.cancel(); // This will trigger utterance.onend or onerror
+        // onend/onerror handles interval clearing and speaking state resets.
         setIsSpeaking(false);
         setSpeakingText(null);
-        setIsSimulatedClonedVoiceSpeaking(false); // Ensure this is also reset
+        setIsSimulatedClonedVoiceSpeaking(false);
         return; 
     }
     
-    if (!imagePreview || !selectedImage) { 
+    if (!imagePreviewRef.current || !selectedImage) { 
       toast({ title: "Image Required for Animation", description: "Please upload an image in the 'Text & Image to Speech Preparation' section.", variant: "destructive" });
       console.log('[handleGenerateAnimatedFrameAndSpeak] Aborted: No image selected.');
       return;
@@ -557,7 +603,6 @@ export default function Home() {
       return;
     }
     
-    // Cancel any other ongoing speech before starting new generation/speech
     if (typeof window !== 'undefined' && window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
         console.log('[handleGenerateAnimatedFrameAndSpeak] Cancelling ongoing browser speech before animation generation attempt.');
         window.speechSynthesis.cancel();
@@ -568,6 +613,7 @@ export default function Home() {
 
     setIsGeneratingFrame(true);
     setAnimatedFramePreview(null); 
+    setActiveDisplayFrame(imagePreviewRef.current); // Show original image while generating
     console.log('[handleGenerateAnimatedFrameAndSpeak] Cleared animatedFramePreview, isGeneratingFrame is true.');
 
     try {
@@ -576,7 +622,7 @@ export default function Home() {
       const animationPrompt = `Generate an image of this person as if they are speaking the words: "${textToSpeakForAnimation.substring(0, 50)}${textToSpeakForAnimation.length > 50 ? "..." : ""}". The style should be consistent with the input image. Ensure the person's mouth is appropriately shaped for speech.`;
       
       const input: GenerateAnimatedFrameInput = {
-        originalImageDataUri: imagePreview,
+        originalImageDataUri: imagePreviewRef.current, // Use ref for current image
         animationPrompt: animationPrompt,
       };
 
@@ -584,37 +630,52 @@ export default function Home() {
       const result = await generateAnimatedFrame(input);
 
       if (result.generatedFrameDataUri) {
-        setAnimatedFramePreview(result.generatedFrameDataUri);
+        setAnimatedFramePreview(result.generatedFrameDataUri); // This updates animatedFramePreviewRef via useEffect
+        setActiveDisplayFrame(result.generatedFrameDataUri); // Display the generated frame immediately
         toast({ title: "AI Frame Generation Successful", description: "Animated frame generated. Preparing to speak..." });
 
-        // Speak the text after successfully generating the frame
         if (isSpeechSupported) {
-          // Ensure previous speaking states are cleared before setting new ones for this specific audio
-          setIsSimulatedClonedVoiceSpeaking(false); // Explicitly false
-          setIsSpeaking(true); // This is for the animated frame's audio
+          setIsSimulatedClonedVoiceSpeaking(false); 
+          setIsSpeaking(true); 
           setSpeakingText(textToSpeakForAnimation); 
 
           setTimeout(() => {
             if (!isSpeakingRef.current || speakingTextRef.current !== textToSpeakForAnimation) {
               console.log('[AnimatedFrame Speak] Speak request cancelled or text changed. Current isSpeakingRef:', isSpeakingRef.current, 'speakingTextRef:', speakingTextRef.current);
-              if (isSpeakingRef.current && animatedFramePreview) { // Only reset if it was meant for this frame
+              if (isSpeakingRef.current && animatedFramePreviewRef.current) { 
                 setIsSpeaking(false); 
                 setSpeakingText(null); 
               }
               return;
             }
-            console.log('[AnimatedFrame Speak] setTimeout: Speaking now with text:', textToSpeakForAnimation);
+            console.log('[AnimatedFrame Speak] setTimeout: Speaking now with text:', textToSpeakForAnimation!);
             const utterance = new SpeechSynthesisUtterance(textToSpeakForAnimation!);
+            
             utterance.onstart = () => { 
               console.log('[AnimatedFrame Speak] Utterance started.'); 
               setIsSpeaking(true); 
               setSpeakingText(textToSpeakForAnimation);
               setIsSimulatedClonedVoiceSpeaking(false);
+
+              if (imagePreviewRef.current && animatedFramePreviewRef.current) {
+                const originalImg = imagePreviewRef.current;
+                const speakingImg = animatedFramePreviewRef.current;
+                setActiveDisplayFrame(speakingImg); // Start with speaking frame
+                if (animationIntervalRef.current) clearInterval(animationIntervalRef.current);
+                animationIntervalRef.current = setInterval(() => {
+                  setActiveDisplayFrame(currentFrame => currentFrame === originalImg ? speakingImg : originalImg);
+                }, 300); // Flicker speed
+              }
             };
             utterance.onend = () => { 
               console.log('[AnimatedFrame Speak] Utterance ended.'); 
               setIsSpeaking(false); 
               setSpeakingText(null); 
+              if (animationIntervalRef.current) {
+                clearInterval(animationIntervalRef.current);
+                animationIntervalRef.current = null;
+              }
+              setActiveDisplayFrame(animatedFramePreviewRef.current); // Settle on speaking frame
             };
             utterance.onerror = (event) => {
               if (event.error === 'interrupted') {
@@ -626,6 +687,11 @@ export default function Home() {
               }
               setIsSpeaking(false); 
               setSpeakingText(null);
+              if (animationIntervalRef.current) {
+                clearInterval(animationIntervalRef.current);
+                animationIntervalRef.current = null;
+              }
+              setActiveDisplayFrame(animatedFramePreviewRef.current); // Settle on speaking frame
             };
             window.speechSynthesis.speak(utterance);
           }, 100);
@@ -637,6 +703,7 @@ export default function Home() {
         const errMsg = result.errorMessage || "AI frame generation failed to return an image.";
         console.error('[handleGenerateAnimatedFrameAndSpeak]', errMsg, result);
         setAnimationError(errMsg);
+        setActiveDisplayFrame(imagePreviewRef.current); // Revert to original if error
         toast({ title: "AI Frame Generation Failed", description: errMsg, variant: "destructive" });
       }
 
@@ -644,6 +711,7 @@ export default function Home() {
       console.error("[handleGenerateAnimatedFrameAndSpeak] CRITICAL ERROR in try block:", error);
       const message = error.message || "An unexpected error occurred during AI frame generation.";
       setAnimationError(message);
+      setActiveDisplayFrame(imagePreviewRef.current); // Revert to original if critical error
       toast({ title: "Animation Error", description: message, variant: "destructive" });
     } finally {
       console.log('[handleGenerateAnimatedFrameAndSpeak] In finally block. Setting isGeneratingFrame to false.');
@@ -654,11 +722,8 @@ export default function Home() {
   const currentPreparedTextIsSpeaking = isSpeaking && speakingText === preparedSpeechText && preparedSpeechText !== null;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && !!textForSimulatedClonedVoice;
   
-  // Refined logic for determining if the animated frame's specific audio is playing
   const getSpeakingTextForCurrentAnimatedFrame = (): string | null => {
-    if (isSpeaking && speakingText && animatedFramePreview) {
-        // The text used for animation is either cloned voice text (if available and used) or prepared text.
-        // Check if `speakingText` matches the one that would have been selected.
+    if (isSpeaking && speakingText && animatedFramePreviewRef.current) { // Check animatedFramePreviewRef
         const wasFromCloned = isUsableClonedTextAvailable() && speakingText === textForSimulatedClonedVoice;
         const wasFromPrepared = isUsablePreparedTextAvailable() && speakingText === preparedSpeechText;
 
@@ -684,6 +749,7 @@ export default function Home() {
     speakingText_value: speakingText ? speakingText.substring(0,30) + "..." : null,
     currentAnimatedFrameTextIsSpeaking,
     isTextAvailableForAnimation,
+    activeDisplayFrame_available: !!activeDisplayFrame,
   });
 
   return (
@@ -820,7 +886,7 @@ export default function Home() {
             <div className="space-y-4">
               <div>
                 <Label htmlFor="animation-image-source" className="text-base">Image Source for Animation:</Label>
-                 {imagePreview && selectedImage ? (
+                 {imagePreview ? (
                     <div className="mt-2 border rounded-md p-2 inline-block bg-muted/30">
                       <p className="text-sm text-muted-foreground mb-1">
                         Using image uploaded in the "Text &amp; Image to Speech Preparation" section:
@@ -875,23 +941,15 @@ export default function Home() {
                       <p className="text-lg font-semibold text-white">Generating AI Frame...</p>
                       <p className="text-sm text-gray-300">Please wait, AI is processing the image.</p>
                     </div>
-                  ) : animatedFramePreview ? (
+                  ) : activeDisplayFrame ? (
                     <Image
-                      src={animatedFramePreview}
-                      alt="AI Generated animated frame"
+                      key={activeDisplayFrame} 
+                      src={activeDisplayFrame}
+                      alt={activeDisplayFrame === imagePreviewRef.current ? "Uploaded image" : "AI Generated animated frame"}
                       fill
                       style={{ objectFit: 'contain' }}
                       className="rounded-md"
-                      data-ai-hint="animated portrait"
-                    />
-                  ) : imagePreview ? ( 
-                     <Image
-                      src={imagePreview}
-                      alt="Uploaded image placeholder for animation"
-                      fill
-                      style={{ objectFit: 'contain' }}
-                      className="rounded-md"
-                      data-ai-hint="uploaded image"
+                      data-ai-hint={activeDisplayFrame === imagePreviewRef.current ? "uploaded image" : "animated portrait"}
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
@@ -908,7 +966,7 @@ export default function Home() {
                   </div>
                 )}
                  <p className="text-xs text-muted-foreground mt-2 italic">
-                    Note: This feature uses AI to generate a single new still image based on your uploaded image and the selected text, then plays the audio. It does not produce a continuous video.
+                    Note: This feature uses AI to generate a single new still image based on your uploaded image and the selected text. The image will flicker between original and generated while audio plays. It does not produce a continuous video.
                   </p>
               </div>
             </div>
@@ -921,5 +979,3 @@ export default function Home() {
     </div>
   );
 }
-
-    

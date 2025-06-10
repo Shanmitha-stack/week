@@ -511,12 +511,18 @@ export default function Home() {
   const handleAnimateFace = useCallback(async () => {
     const currentHasPreparedTextAudio = preparedSpeechText && preparedSpeechText.trim() !== "" && !preparedSpeechText.toLowerCase().startsWith("no text was provided") && !preparedSpeechText.toLowerCase().startsWith("error:");
     const currentHasSimulatedClonedAudio = !!(textForSimulatedClonedVoice && textForSimulatedClonedVoice.trim() !== "");
+    const audioSourceForAnimationLogic = currentHasSimulatedClonedAudio
+      ? "simulated cloned audio"
+      : (currentHasPreparedTextAudio ? "prepared speech text" : null);
 
-    console.log('[handleAnimateFace] Attempting to animate. States:');
-    console.log(`  - selectedImage: ${selectedImage ? selectedImage.name : 'null'}, imagePreview: ${imagePreview ? 'available' : 'null'}`);
-    console.log(`  - preparedSpeechText (state): "${preparedSpeechText}" (usable: ${currentHasPreparedTextAudio})`);
-    console.log(`  - textForSimulatedClonedVoice (state): "${textForSimulatedClonedVoice}" (usable: ${currentHasSimulatedClonedAudio})`);
-    console.log(`  - selectedVoiceSample: ${selectedVoiceSample ? selectedVoiceSample.name : 'null'}`);
+    console.log('[handleAnimateFace] Initiated. States:', {
+      selectedImageName: selectedImage?.name,
+      imagePreviewAvailable: !!imagePreview,
+      preparedSpeechText,
+      textForSimulatedClonedVoice,
+      selectedVoiceSampleName: selectedVoiceSample?.name,
+      audioSourceForAnimationLogic,
+    });
     
     if (!selectedImage || !imagePreview) { 
       toast({ title: "Image Required for Animation", description: "Please upload an image in the 'Text & Image to Speech Preparation' section. That image will be used for animation.", variant: "destructive" });
@@ -524,10 +530,6 @@ export default function Home() {
       return;
     }
     
-    const audioSourceForAnimationLogic = currentHasSimulatedClonedAudio
-      ? "simulated cloned audio"
-      : (currentHasPreparedTextAudio ? "prepared speech text" : null);
-
     console.log(`[handleAnimateFace] Determined audioSourceForAnimation for this attempt: ${audioSourceForAnimationLogic}`);
 
     if (!audioSourceForAnimationLogic) {
@@ -546,6 +548,7 @@ export default function Home() {
 
     setIsAnimatingFace(true);
     setMockVideoPlayerImage(null); 
+    console.log('[handleAnimateFace] Cleared mockVideoPlayerImage, isAnimatingFace is true.');
 
     try {
       toast({ title: "Starting Mock Animation Process", description: "Preprocessing face image (simulated)..." });
@@ -563,12 +566,16 @@ export default function Home() {
       
       toast({ title: "Generating Mock Animation Frame", description: "Using AI to create a dynamic placeholder frame..." });
       
+      console.log('[handleAnimateFace] Calling generateAnimatedFrame with prompt:', animationCreativePrompt, 'and imagePreview (first 100 chars):', imagePreview?.substring(0, 100));
       const frameResult = await generateAnimatedFrame({
         originalImageDataUri: imagePreview as string, 
         animationPrompt: animationCreativePrompt,
       });
+      console.log('[handleAnimateFace] frameResult from AI:', frameResult);
+
 
       if (frameResult.generatedFrameDataUri) {
+        console.log('[handleAnimateFace] AI frame generation successful. Setting image:', frameResult.generatedFrameDataUri.substring(0,100) + "...");
         setMockVideoPlayerImage(frameResult.generatedFrameDataUri);
         toast({ title: "Mock Animation Frame Generated", description: "AI-generated placeholder frame is now available." });
         
@@ -606,24 +613,36 @@ export default function Home() {
         }
 
       } else {
-        setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}`); 
+        const fallbackUrl = `https://placehold.co/640x360.png?t=${Date.now()}&ai_fail=1`;
+        console.log('[handleAnimateFace] AI frame generation failed or no URI. Setting fallback. Error:', frameResult.errorMessage, 'Fallback URL:', fallbackUrl);
+        setMockVideoPlayerImage(fallbackUrl); 
         toast({ title: "Mock Frame Generation Failed", description: frameResult.errorMessage || "Could not generate AI frame, using fallback.", variant: "destructive" });
       }
       console.log('[handleAnimateFace] Mock processing complete.');
 
     } catch (error: any) {
-      console.error("Error during face animation process:", error);
+      const fallbackUrlOnError = `https://placehold.co/640x360.png?t=${Date.now()}&err=hc`;
+      console.error("[handleAnimateFace] CRITICAL ERROR in try block:", error);
       toast({ title: "Animation Error", description: "An unexpected error occurred during face animation.", variant: "destructive" });
-      setMockVideoPlayerImage(`https://placehold.co/640x360.png?t=${Date.now()}`);
+      console.log('[handleAnimateFace] Setting fallback due to CRITICAL ERROR. Fallback URL:', fallbackUrlOnError);
+      setMockVideoPlayerImage(fallbackUrlOnError);
     } finally {
+      console.log('[handleAnimateFace] In finally block. Setting isAnimatingFace to false.');
       setIsAnimatingFace(false);
-      console.log('[handleAnimateFace] Completed. isAnimatingFace set to false.');
     }
   }, [selectedImage, imagePreview, toast, preparedSpeechText, textForSimulatedClonedVoice, selectedVoiceSample, handlePlaySimulatedClonedVoice, handleSpeakPreparedText, isSpeechSupported]);
 
   const currentPreparedTextIsSpeaking = isSpeaking && speakingText === preparedSpeechText && preparedSpeechText !== null;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && !!textForSimulatedClonedVoice;
 
+  console.log('[Home render] States before JSX:', {
+    isAnimatingFace,
+    mockVideoPlayerImage: mockVideoPlayerImage ? mockVideoPlayerImage.substring(0,100) + "..." : null,
+    isGeneratingSpeech,
+    isCloningVoice,
+    preparedSpeechText: preparedSpeechText ? preparedSpeechText.substring(0,50) + "..." : null,
+    textForSimulatedClonedVoice: textForSimulatedClonedVoice ? textForSimulatedClonedVoice.substring(0,50) + "..." : null,
+  });
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -824,7 +843,7 @@ export default function Home() {
                       width={640}
                       height={360}
                       className="object-contain w-full h-full"
-                      data-ai-hint={mockVideoPlayerImage.startsWith('data:image') ? "ai portrait" : "generic placeholder"}
+                      data-ai-hint={mockVideoPlayerImage.startsWith('data:image') ? "ai portrait" : (mockVideoPlayerImage.includes('ai_fail') || mockVideoPlayerImage.includes('err=hc') ? "generic error placeholder" : "generic placeholder")}
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
@@ -848,3 +867,4 @@ export default function Home() {
     </div>
   );
 }
+

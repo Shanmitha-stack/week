@@ -732,6 +732,7 @@ export default function Home() {
     }
      if (!auth.currentUser) {
       toast({ title: "Authentication Required", description: "Please sign in to generate a lip-sync video.", variant: "destructive" });
+      setIsGeneratingFirebaseVideo(false);
       return;
     }
 
@@ -740,25 +741,27 @@ export default function Home() {
     setFirebaseVideoError(null);
     toast({ title: "Calling Backend...", description: "Requesting mock lip-sync video from Firebase Function..." });
 
+    let idToken: string | null = null;
     try {
-      let idToken: string | null = null;
-      if (auth.currentUser) {
-        try {
-          idToken = await auth.currentUser.getIdToken(true); // Force refresh token
-        } catch (error) {
-          console.error("Error getting ID token:", error);
-          toast({ title: "Authentication Error", description: "Could not get user token. Please try signing in again.", variant: "destructive" });
-          setIsGeneratingFirebaseVideo(false);
-          return;
-        }
-      }
+      idToken = await auth.currentUser.getIdToken(true); // Force refresh token
+    } catch (tokenError: any) {
+      console.error("Error getting ID token:", tokenError);
+      const tokenErrorMessage = `Authentication Error: Could not get user token. Please try signing in again. (Details: ${tokenError.message || 'Unknown token error'})`;
+      setFirebaseVideoError(tokenErrorMessage);
+      toast({ title: "Authentication Error", description: tokenErrorMessage, variant: "destructive" });
+      setIsGeneratingFirebaseVideo(false);
+      return;
+    }
 
-      if (!idToken) {
-        toast({ title: "Authentication Failed", description: "Failed to retrieve authentication token. Please ensure you are logged in.", variant: "destructive" });
-        setIsGeneratingFirebaseVideo(false);
-        return;
-      }
+    if (!idToken) {
+      const noTokenMessage = "Authentication Failed: Failed to retrieve authentication token. Please ensure you are logged in.";
+      setFirebaseVideoError(noTokenMessage);
+      toast({ title: "Authentication Failed", description: noTokenMessage, variant: "destructive" });
+      setIsGeneratingFirebaseVideo(false);
+      return;
+    }
 
+    try {
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${idToken}`,
@@ -773,27 +776,72 @@ export default function Home() {
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Failed to parse error response from backend proxy." }));
-        let detailedMessage = errorData.message || `Network response was not ok (status: ${response.status})`;
-        if (response.status === 401) {
-            detailedMessage = `Authentication failed (401). Your session might have expired or the token is invalid. Please try signing in again. Original error: ${errorData.message || 'Unauthorized'}`;
+      // Try to parse the JSON body regardless of response.ok, as it might contain error details
+      let errorDataFromApiRoute: any = null;
+      try {
+        errorDataFromApiRoute = await response.json();
+      } catch (jsonParseError) {
+        console.warn("[FirebaseLipSync] Could not parse JSON response from API route, status:", response.status, response.statusText);
+        // If JSON parsing fails, and response is not ok, create a generic error
+        if (!response.ok) {
+          const rawErrorText = await response.text().catch(() => "Could not read error text.");
+          throw new Error(`Network response was not ok (status: ${response.status}). API Response: ${rawErrorText.substring(0, 200)}`);
         }
-        console.error(`[FirebaseLipSync] Error from backend proxy: ${response.status}`, errorData);
-        throw new Error(detailedMessage);
+      }
+      
+      if (!response.ok) {
+        // errorDataFromApiRoute should be populated here if parsing succeeded
+        let detailedMessage = errorDataFromApiRoute?.message || `Network response was not ok (status: ${response.status})`;
+        let functionErrorCode = errorDataFromApiRoute?.firebaseFunctionError?.errorCode || errorDataFromApiRoute?.errorCode;
+
+        if (response.status === 401) {
+            detailedMessage = `Authentication failed (401). Your session might have expired or the token is invalid.`;
+            if (errorDataFromApiRoute?.firebaseFunctionError?.message) {
+              detailedMessage += ` Function Details: ${errorDataFromApiRoute.firebaseFunctionError.message}`;
+            } else if (errorDataFromApiRoute?.message && errorDataFromApiRoute.message !== detailedMessage) {
+              detailedMessage += ` Details: ${errorDataFromApiRoute.message}`;
+            }
+            if (functionErrorCode) {
+                 detailedMessage += ` (Error Code: ${functionErrorCode})`;
+            } else {
+                 detailedMessage += ` (No specific error code from function)`;
+            }
+        }
+        console.error(`[FirebaseLipSync] Error from backend proxy: ${response.status}`, errorDataFromApiRoute);
+        // Throw an error object that includes the structured data for the catch block
+        const errorToThrow: any = new Error(detailedMessage);
+        errorToThrow.details = errorDataFromApiRoute; // Attach the full parsed error data
+        throw errorToThrow;
       }
 
-      const result = await response.json();
+      // If response.ok, errorDataFromApiRoute is actually the success data
+      const result = errorDataFromApiRoute;
       if (result.mockVideoUrl) {
         setFirebaseVideoUrl(result.mockVideoUrl);
         toast({ title: "Backend Call Successful", description: "Mock video URL received.", duration: 5000 });
       } else {
-        throw new Error(result.message || "Backend did not return a video URL.");
+        const noUrlError: any = new Error(result.message || "Backend did not return a video URL.");
+        noUrlError.details = result;
+        throw noUrlError;
       }
+
     } catch (error: any) {
       console.error("Error calling Firebase lip-sync API:", error);
-      setFirebaseVideoError(error.message || "An unexpected error occurred calling the backend.");
-      toast({ title: "Backend Call Error", description: error.message || "Failed to get mock video from backend.", variant: "destructive" });
+      let finalErrorMessage = error.message || "An unexpected error occurred calling the backend.";
+      // If error.details exists (from our custom thrown error), use its content
+      if (error.details) {
+        const functionError = error.details.firebaseFunctionError;
+        if (functionError && functionError.message) {
+          finalErrorMessage = `Function Error: ${functionError.message}`;
+          if (functionError.errorCode) {
+            finalErrorMessage += ` (Code: ${functionError.errorCode})`;
+          }
+        } else if (error.details.message) {
+          finalErrorMessage = error.details.message; // Use message from API route if function error not specific
+        }
+      }
+      setFirebaseVideoError(finalErrorMessage);
+      toast({ title: "Backend Call Error", description: finalErrorMessage, variant: "destructive" });
     } finally {
       setIsGeneratingFirebaseVideo(false);
     }

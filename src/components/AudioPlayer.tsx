@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { FC } from 'react';
@@ -9,9 +10,10 @@ import { Slider } from '@/components/ui/slider';
 interface AudioPlayerProps {
   src: string | null;
   autoPlay?: boolean;
+  onPlayerError?: (message: string) => void;
 }
 
-const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
+const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false, onPlayerError }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,11 +24,11 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
   const [prevVolume, setPrevVolume] = useState(0.5);
 
   useEffect(() => {
-    if (src) {
+    if (src && src.trim() !== "") {
       const newAudio = new Audio(src);
       audioRef.current = newAudio;
       setIsLoading(true);
-      setIsPlaying(false);
+      setIsPlaying(false); // Reset playing state for new src
       setCurrentTime(0);
       setDuration(0);
 
@@ -43,16 +45,62 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
         setCurrentTime(0);
         if (audioRef.current) audioRef.current.currentTime = 0;
       };
+      
+      const handlePlayEvent = () => setIsPlaying(true);
+      const handlePauseEvent = () => setIsPlaying(false);
+
       const handleCanPlayThrough = () => {
         setIsLoading(false);
         if (autoPlay && audioRef.current) {
-          audioRef.current.play().catch(error => console.error("Autoplay failed:", error));
-          setIsPlaying(true);
+          audioRef.current.play()
+            .then(() => {
+              // isPlaying will be set by the 'play' event listener
+            })
+            .catch(error => {
+              console.error("AudioPlayer: Autoplay failed:", error);
+              setIsPlaying(false); // Ensure isPlaying is false if autoplay promise rejects
+              if (onPlayerError) {
+                onPlayerError("AudioPlayer: Autoplay was prevented. Press play manually or check browser console.");
+              }
+            });
+        } else {
+           setIsPlaying(audioRef.current ? !audioRef.current.paused : false);
         }
       };
+
       const handleError = (e: Event) => {
         setIsLoading(false);
-        console.error("Audio Player Error: ", (e.target as HTMLAudioElement).error);
+        const audioElement = e.target as HTMLAudioElement;
+        const mediaError = audioElement.error;
+        let errorMessage = "AudioPlayer: An unknown error occurred loading the audio.";
+        if (mediaError) {
+          switch (mediaError.code) {
+            case MediaError.MEDIA_ERR_ABORTED:
+              errorMessage = "AudioPlayer: Playback aborted by the user or script.";
+              break;
+            case MediaError.MEDIA_ERR_NETWORK:
+              errorMessage = "AudioPlayer: A network error caused the audio download to fail.";
+              break;
+            case MediaError.MEDIA_ERR_DECODE:
+              errorMessage = "AudioPlayer: The audio playback was aborted due to a corruption problem or because the audio used features your browser did not support.";
+              break;
+            case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+              errorMessage = "AudioPlayer: The audio could not be loaded, either because the server or network failed or because the format is not supported.";
+              break;
+            default:
+              errorMessage = `AudioPlayer: An error occurred (Code: ${mediaError.code}, Message: ${mediaError.message || 'N/A'}).`;
+          }
+        }
+        console.error("AudioPlayer Error Details:", {
+            code: mediaError?.code,
+            message: mediaError?.message,
+            currentSrc: audioElement.currentSrc,
+            srcAttempted: src,
+          }
+        );
+        if (onPlayerError) {
+          onPlayerError(errorMessage);
+        }
       };
       const handleLoadStart = () => setIsLoading(true);
 
@@ -62,6 +110,8 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
       newAudio.addEventListener('canplaythrough', handleCanPlayThrough);
       newAudio.addEventListener('error', handleError);
       newAudio.addEventListener('loadstart', handleLoadStart);
+      newAudio.addEventListener('play', handlePlayEvent);
+      newAudio.addEventListener('pause', handlePauseEvent);
       
       newAudio.load();
 
@@ -72,24 +122,36 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
         newAudio.removeEventListener('canplaythrough', handleCanPlayThrough);
         newAudio.removeEventListener('error', handleError);
         newAudio.removeEventListener('loadstart', handleLoadStart);
+        newAudio.removeEventListener('play', handlePlayEvent);
+        newAudio.removeEventListener('pause', handlePauseEvent);
+
         if (audioRef.current) {
           audioRef.current.pause();
-          audioRef.current.src = '';
+          try {
+            audioRef.current.src = ''; 
+          } catch (err) { /* ignore */ }
+          audioRef.current.removeAttribute('src'); 
+          audioRef.current.load(); 
           audioRef.current = null;
         }
       };
     } else {
       if (audioRef.current) {
         audioRef.current.pause();
+        try {
+          audioRef.current.src = '';
+        } catch(err) {/* ignore */}
+        audioRef.current.removeAttribute('src');
+        audioRef.current.load();
         audioRef.current = null;
       }
       setIsPlaying(false);
       setDuration(0);
       setCurrentTime(0);
-      setIsLoading(false);
+      setIsLoading(false); // Set loading to false if src is invalid/cleared
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, autoPlay]);
+  }, [src]); // autoPlay removed as direct dep, its effect is within handleCanPlayThrough
 
   useEffect(() => {
     if (audioRef.current) {
@@ -102,13 +164,18 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
     if (isPlaying) {
       audioRef.current.pause();
     } else {
-      audioRef.current.play().catch(console.error);
+      audioRef.current.play().catch(error => {
+        console.error("AudioPlayer: Playback failed on toggle:", error);
+        if (onPlayerError) {
+            onPlayerError("AudioPlayer: Could not start playback. Check browser console for details.");
+        }
+      });
     }
-    setIsPlaying(!isPlaying);
+    // isPlaying state will be updated by 'play'/'pause' event listeners
   };
 
   const handleSeek = (value: number[]) => {
-    if (audioRef.current && !isLoading) {
+    if (audioRef.current && !isLoading && duration > 0) {
       const newTime = value[0];
       audioRef.current.currentTime = newTime;
       setCurrentTime(newTime);
@@ -146,20 +213,22 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
     return <Volume2 className="h-5 w-5" />;
   };
   
-  if (!src && !audioRef.current && !isLoading) return null;
+  if ((!src || src.trim() === "") && !isLoading && !audioRef.current) {
+    return null;
+  }
 
   return (
     <div className="flex items-center gap-3 p-3 border rounded-lg shadow-sm bg-card w-full">
-      <Button onClick={togglePlayPause} variant="ghost" size="icon" disabled={isLoading || !src} aria-label={isPlaying ? "Pause" : "Play"}>
+      <Button onClick={togglePlayPause} variant="ghost" size="icon" disabled={isLoading || (!src || src.trim() === "")} aria-label={isPlaying ? "Pause" : "Play"}>
         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
       </Button>
       <div className="flex-grow mx-2">
         <Slider
           value={[currentTime]}
-          max={duration || 1}
+          max={duration > 0 ? duration : 1} 
           step={0.1}
           onValueChange={handleSeek}
-          disabled={isLoading || !src || duration === 0}
+          disabled={isLoading || (!src || src.trim() === "") || duration === 0}
           aria-label="Audio progress"
         />
         <div className="flex justify-between text-xs text-muted-foreground mt-1">
@@ -168,7 +237,7 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
         </div>
       </div>
       <div className="flex items-center gap-2 w-32">
-        <Button onClick={toggleMute} variant="ghost" size="icon" disabled={isLoading || !src} aria-label={isMuted ? "Unmute" : "Mute"}>
+        <Button onClick={toggleMute} variant="ghost" size="icon" disabled={isLoading || (!src || src.trim() === "")} aria-label={isMuted ? "Unmute" : "Mute"}>
           <VolumeIconDisplay />
         </Button>
         <Slider
@@ -176,7 +245,7 @@ const AudioPlayer: FC<AudioPlayerProps> = ({ src, autoPlay = false }) => {
             max={1}
             step={0.01}
             onValueChange={handleVolumeChange}
-            disabled={isLoading || !src}
+            disabled={isLoading || (!src || src.trim() === "")}
             aria-label="Volume"
             className="w-full"
         />

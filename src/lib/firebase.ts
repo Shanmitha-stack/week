@@ -1,8 +1,8 @@
 
 import { initializeApp, getApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
-// import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getAuth, type Auth } from 'firebase/auth';
+import { getFunctions, type FirebaseFunctions } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -23,7 +23,10 @@ if (!getApps().length) {
 }
 
 const storage: FirebaseStorage = getStorage(app);
-// const firestore: Firestore = getFirestore(app);
 const auth: Auth = getAuth(app);
+// Initialize Firebase Functions, specifying the region.
+// Emulator connection will be handled on the client-side where it's used.
+const functionsInstance: FirebaseFunctions = getFunctions(app, 'us-central1');
 
-export { app, storage, auth /*, firestore */ };
+
+export { app, storage, auth, functionsInstance as functions };

@@ -14,8 +14,9 @@ import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle,
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame, type GenerateAnimatedFrameOutput } from '@/ai/flows/generate-animated-frame-flow';
 
-import { storage, auth } from '@/lib/firebase'; // Firebase Storage & Auth
+import { storage, auth, functions as firebaseFunctions } from '@/lib/firebase'; // Firebase Storage, Auth, and Functions
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { httpsCallable, connectFunctionsEmulator as fbConnectFunctionsEmulator, type HttpsError } from 'firebase/functions';
 
 
 export default function Home() {
@@ -45,7 +46,7 @@ export default function Home() {
   const [displayedFrameInAnimatedOutput, setDisplayedFrameInAnimatedOutput] = useState<string | null>(null);
 
 
-  // States for Firebase Lip-Sync Video section
+  // States for Firebase Lip-Sync Video section (now Callable Function)
   const [isGeneratingFirebaseVideo, setIsGeneratingFirebaseVideo] = useState<boolean>(false);
   const [firebaseVideoUrl, setFirebaseVideoUrl] = useState<string | null>(null);
   const [firebaseVideoError, setFirebaseVideoError] = useState<string | null>(null);
@@ -121,6 +122,23 @@ export default function Home() {
     } else {
       setIsSpeechSupported(false);
     }
+    
+    // Connect to Firebase Functions emulator if URL is provided
+    const functionsEmulatorUrl = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL;
+    if (functionsEmulatorUrl && firebaseFunctions) {
+      try {
+        const url = new URL(functionsEmulatorUrl);
+        const port = url.port ? parseInt(url.port, 10) : (url.protocol === 'https:' ? 443 : 80);
+        console.log(`Attempting to connect Firebase Functions emulator to host: ${url.hostname}, port: ${port}`);
+        fbConnectFunctionsEmulator(firebaseFunctions, url.hostname, port);
+        // Consider a subtle toast or log if successful connection is important for user feedback
+        // toast({ title: "Emulator Info", description: `Functions emulator connected to ${url.hostname}:${port}`, duration: 3000 });
+      } catch (e) {
+        console.error("Invalid NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL for emulator connection:", functionsEmulatorUrl, e);
+        toast({ title: "Emulator Config Error", description: "Could not connect to Firebase Functions emulator: Invalid URL format.", variant: "destructive", duration: 7000 });
+      }
+    }
+
 
     return () => { 
       if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
@@ -139,6 +157,7 @@ export default function Home() {
       }
       setIsAnimatedOutputAnimating(false);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
 
@@ -732,114 +751,48 @@ export default function Home() {
     }
      if (!auth.currentUser) {
       toast({ title: "Authentication Required", description: "Please sign in to generate a lip-sync video.", variant: "destructive" });
-      setIsGeneratingFirebaseVideo(false);
+      setIsGeneratingFirebaseVideo(false); // Ensure loading state is reset
       return;
     }
 
     setIsGeneratingFirebaseVideo(true);
     setFirebaseVideoUrl(null);
     setFirebaseVideoError(null);
-    toast({ title: "Calling Backend...", description: "Requesting mock lip-sync video from Firebase Function..." });
-
-    let idToken: string | null = null;
+    toast({ title: "Calling Backend...", description: "Requesting mock lip-sync video from Firebase Callable Function..." });
+    
     try {
-      idToken = await auth.currentUser.getIdToken(true); // Force refresh token
-    } catch (tokenError: any) {
-      console.error("Error getting ID token:", tokenError);
-      const tokenErrorMessage = `Authentication Error: Could not get user token. Please try signing in again. (Details: ${tokenError.message || 'Unknown token error'})`;
-      setFirebaseVideoError(tokenErrorMessage);
-      toast({ title: "Authentication Error", description: tokenErrorMessage, variant: "destructive" });
-      setIsGeneratingFirebaseVideo(false);
-      return;
-    }
-
-    if (!idToken) {
-      const noTokenMessage = "Authentication Failed: Failed to retrieve authentication token. Please ensure you are logged in.";
-      setFirebaseVideoError(noTokenMessage);
-      toast({ title: "Authentication Failed", description: noTokenMessage, variant: "destructive" });
-      setIsGeneratingFirebaseVideo(false);
-      return;
-    }
-
-    try {
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`,
-      };
-      
-      const response = await fetch('/api/firebase-lip-sync', {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({ 
-          textToSpeak: textToSpeak,
-          imageId: selectedImage.name || "uploaded_image" 
-        }),
+      const callPrepareLipSyncVideo = httpsCallable(firebaseFunctions, 'prepareLipSyncVideo');
+      const result = await callPrepareLipSyncVideo({
+        textToSpeak: textToSpeak,
+        imageId: selectedImage.name || "uploaded_image"
       });
 
-      // Try to parse the JSON body regardless of response.ok, as it might contain error details
-      let errorDataFromApiRoute: any = null;
-      try {
-        errorDataFromApiRoute = await response.json();
-      } catch (jsonParseError) {
-        console.warn("[FirebaseLipSync] Could not parse JSON response from API route, status:", response.status, response.statusText);
-        // If JSON parsing fails, and response is not ok, create a generic error
-        if (!response.ok) {
-          const rawErrorText = await response.text().catch(() => "Could not read error text.");
-          throw new Error(`Network response was not ok (status: ${response.status}). API Response: ${rawErrorText.substring(0, 200)}`);
-        }
-      }
-      
-      if (!response.ok) {
-        // errorDataFromApiRoute should be populated here if parsing succeeded
-        let detailedMessage = errorDataFromApiRoute?.message || `Network response was not ok (status: ${response.status})`;
-        let functionErrorCode = errorDataFromApiRoute?.firebaseFunctionError?.errorCode || errorDataFromApiRoute?.errorCode;
+      const data = result.data as { mockVideoUrl?: string; message?: string; dataReceived?: any; error?: string };
 
-        if (response.status === 401) {
-            detailedMessage = `Authentication failed (401). Your session might have expired or the token is invalid.`;
-            if (errorDataFromApiRoute?.firebaseFunctionError?.message) {
-              detailedMessage += ` Function Details: ${errorDataFromApiRoute.firebaseFunctionError.message}`;
-            } else if (errorDataFromApiRoute?.message && errorDataFromApiRoute.message !== detailedMessage) {
-              detailedMessage += ` Details: ${errorDataFromApiRoute.message}`;
-            }
-            if (functionErrorCode) {
-                 detailedMessage += ` (Error Code: ${functionErrorCode})`;
-            } else {
-                 detailedMessage += ` (No specific error code from function)`;
-            }
-        }
-        console.error(`[FirebaseLipSync] Error from backend proxy: ${response.status}`, errorDataFromApiRoute);
-        // Throw an error object that includes the structured data for the catch block
-        const errorToThrow: any = new Error(detailedMessage);
-        errorToThrow.details = errorDataFromApiRoute; // Attach the full parsed error data
-        throw errorToThrow;
-      }
-
-      // If response.ok, errorDataFromApiRoute is actually the success data
-      const result = errorDataFromApiRoute;
-      if (result.mockVideoUrl) {
-        setFirebaseVideoUrl(result.mockVideoUrl);
-        toast({ title: "Backend Call Successful", description: "Mock video URL received.", duration: 5000 });
+      if (data && data.mockVideoUrl) {
+        setFirebaseVideoUrl(data.mockVideoUrl);
+        toast({ title: "Backend Call Successful", description: data.message || "Mock video URL received.", duration: 5000 });
+        console.log("Callable function response:", data);
       } else {
-        const noUrlError: any = new Error(result.message || "Backend did not return a video URL.");
-        noUrlError.details = result;
-        throw noUrlError;
+        // This case handles if function executed but didn't return expected data structure
+        const noUrlErrorMsg = data?.message || data?.error || "Callable Function did not return a video URL in the expected format.";
+        console.error("[FirebaseLipSync] Callable Function response missing mockVideoUrl:", data);
+        setFirebaseVideoError(noUrlErrorMsg);
+        toast({ title: "Backend Response Error", description: noUrlErrorMsg, variant: "destructive" });
       }
 
     } catch (error: any) {
-      console.error("Error calling Firebase lip-sync API:", error);
-      let finalErrorMessage = error.message || "An unexpected error occurred calling the backend.";
-      // If error.details exists (from our custom thrown error), use its content
-      if (error.details) {
-        const functionError = error.details.firebaseFunctionError;
-        if (functionError && functionError.message) {
-          finalErrorMessage = `Function Error: ${functionError.message}`;
-          if (functionError.errorCode) {
-            finalErrorMessage += ` (Code: ${functionError.errorCode})`;
-          }
-        } else if (error.details.message) {
-          finalErrorMessage = error.details.message; // Use message from API route if function error not specific
-        }
+      const httpsError = error as HttpsError;
+      console.error("Error calling Firebase Callable Function 'prepareLipSyncVideo':", httpsError);
+      
+      let finalErrorMessage = `Firebase Function Error: ${httpsError.message || 'An unexpected error occurred.'}`;
+      if (httpsError.code) {
+        finalErrorMessage += ` (Code: ${httpsError.code})`;
       }
+      if (httpsError.details) {
+        finalErrorMessage += ` Details: ${JSON.stringify(httpsError.details)}`;
+      }
+      
       setFirebaseVideoError(finalErrorMessage);
       toast({ title: "Backend Call Error", description: finalErrorMessage, variant: "destructive" });
     } finally {
@@ -1141,13 +1094,13 @@ export default function Home() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Lip-Sync Video Generation (Mock Backend Call)" icon={<Video className="text-primary" />}>
+          <SectionCard title="Lip-Sync Video Generation (Callable Function)" icon={<Video className="text-primary" />}>
             <div className="space-y-4">
               <div>
                 <Label htmlFor="firebase-video-info" className="text-base">Image &amp; Audio Source for Backend Video:</Label>
                 {imagePreview && preparedSpeechText ? (
                   <p className="text-sm text-muted-foreground mt-1" id="firebase-video-info">
-                    Uses your uploaded image and the text from "Process Input for Speech" to request a mock video from the backend (Firebase Function). Authentication is required.
+                    Uses your uploaded image and the text from "Process Input for Speech" to request a mock video from the Firebase Callable Function. Authentication is required.
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground mt-1" id="firebase-video-info">
@@ -1163,7 +1116,7 @@ export default function Home() {
                 {isGeneratingFirebaseVideo ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Requesting from Backend...</>
                 ) : (
-                  <><Film className="mr-2 h-4 w-4" />Generate Mock Lip-Sync Video (Backend)</>
+                  <><Film className="mr-2 h-4 w-4" />Generate Mock Lip-Sync Video (Callable)</>
                 )}
               </Button>
 
@@ -1189,7 +1142,7 @@ export default function Home() {
                     Your browser does not support the video tag.
                   </video>
                   <p className="text-xs text-muted-foreground italic">
-                    This video is a mock response from an authenticated Firebase Function simulating a backend lip-sync process.
+                    This video is a mock response from an authenticated Firebase Callable Function simulating a backend lip-sync process.
                   </p>
                 </div>
               )}
@@ -1200,14 +1153,14 @@ export default function Home() {
                     <p className="font-semibold">Backend Video Error:</p>
                   </div>
                   <p>{firebaseVideoError}</p>
-                  {firebaseVideoError.includes("Network error: Could not connect") && (
+                  {firebaseVideoError.includes("functions/unauthenticated") && (
                     <p className="text-xs italic text-destructive/80 mt-1">
-                      Tip: Ensure your Firebase emulator is running (if testing locally) and your <code>.env</code> file has the correct <code>NEXT_PUBLIC_FIREBASE_PROJECT_ID</code> and <code>NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL</code> (if applicable). The function name expected is <code>prepareLipSyncVideo</code> in region <code>us-central1</code>.
+                      Tip: Authentication failed. Please ensure you are signed in. Your session might have expired.
                     </p>
                   )}
-                   {firebaseVideoError.toLowerCase().includes("authentication failed") && (
+                  {firebaseVideoError.includes("functions/unavailable") || firebaseVideoError.includes("functions/internal") && (
                     <p className="text-xs italic text-destructive/80 mt-1">
-                      Tip: Please ensure you are signed in. Your session might have expired.
+                      Tip: The Firebase Function seems to be unavailable or encountered an internal error. Check function logs or emulator status. Ensure `NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL` in your .env file is correct if using the emulator.
                     </p>
                   )}
                 </div>

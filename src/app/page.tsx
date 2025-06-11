@@ -14,7 +14,7 @@ import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle,
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame, type GenerateAnimatedFrameOutput } from '@/ai/flows/generate-animated-frame-flow';
 
-import { storage } from '@/lib/firebase'; // Firebase Storage
+import { storage, auth } from '@/lib/firebase'; // Firebase Storage & Auth
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 
@@ -304,8 +304,8 @@ export default function Home() {
         });
       }
     } catch (error) {
-      const userMessage = "An AI processing error occurred while preparing your input. If an image was included, you might try again with a different image or without the image. If the problem persists, the AI service could be temporarily unavailable or experiencing issues.";
-      setPreparedSpeechText("Error: AI processing failed for speech preparation.");
+      const userMessage = "An AI processing error occurred while preparing your input. This might be due to the AI model having trouble with the provided image (if any) or text. You could try again with a different image, modify the text, or try without an image. If the problem persists, the AI service could be temporarily unavailable.";
+      setPreparedSpeechText("Error: Could not process input for speech. " + ((error as Error).message.includes("AI model processed the request but did not return an image") ? "The AI model had an issue, possibly with the image. Try a different image or no image." : (error as Error).message ));
       console.error("Processing Error in 'handleTextToSpeech' (calling prepareTextForSpeech flow):", error);
       toast({
         title: "AI Processing Error",
@@ -730,6 +730,10 @@ export default function Home() {
       toast({ title: "Prepared Text Required", description: "Please process text for speech first.", variant: "destructive" });
       return;
     }
+     if (!auth.currentUser) {
+      toast({ title: "Authentication Required", description: "Please sign in to generate a lip-sync video.", variant: "destructive" });
+      return;
+    }
 
     setIsGeneratingFirebaseVideo(true);
     setFirebaseVideoUrl(null);
@@ -737,11 +741,32 @@ export default function Home() {
     toast({ title: "Calling Backend...", description: "Requesting mock lip-sync video from Firebase Function..." });
 
     try {
+      let idToken: string | null = null;
+      if (auth.currentUser) {
+        try {
+          idToken = await auth.currentUser.getIdToken(true); // Force refresh token
+        } catch (error) {
+          console.error("Error getting ID token:", error);
+          toast({ title: "Authentication Error", description: "Could not get user token. Please try signing in again.", variant: "destructive" });
+          setIsGeneratingFirebaseVideo(false);
+          return;
+        }
+      }
+
+      if (!idToken) {
+        toast({ title: "Authentication Failed", description: "Failed to retrieve authentication token. Please ensure you are logged in.", variant: "destructive" });
+        setIsGeneratingFirebaseVideo(false);
+        return;
+      }
+
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`,
+      };
+      
       const response = await fetch('/api/firebase-lip-sync', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
         body: JSON.stringify({ 
           textToSpeak: textToSpeak,
           imageId: selectedImage.name || "uploaded_image" 
@@ -750,7 +775,10 @@ export default function Home() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: "Failed to parse error response from backend proxy." }));
-        const detailedMessage = errorData.message || `Network response was not ok (status: ${response.status})`;
+        let detailedMessage = errorData.message || `Network response was not ok (status: ${response.status})`;
+        if (response.status === 401) {
+            detailedMessage = `Authentication failed (401). Your session might have expired or the token is invalid. Please try signing in again. Original error: ${errorData.message || 'Unauthorized'}`;
+        }
         console.error(`[FirebaseLipSync] Error from backend proxy: ${response.status}`, errorData);
         throw new Error(detailedMessage);
       }
@@ -1071,11 +1099,11 @@ export default function Home() {
                 <Label htmlFor="firebase-video-info" className="text-base">Image &amp; Audio Source for Backend Video:</Label>
                 {imagePreview && preparedSpeechText ? (
                   <p className="text-sm text-muted-foreground mt-1" id="firebase-video-info">
-                    Uses your uploaded image and the text from "Process Input for Speech" to request a mock video from the backend (Firebase Function).
+                    Uses your uploaded image and the text from "Process Input for Speech" to request a mock video from the backend (Firebase Function). Authentication is required.
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground mt-1" id="firebase-video-info">
-                    Please upload an image and use "Process Input for Speech" first.
+                    Please upload an image, use "Process Input for Speech" first, and ensure you are signed in.
                   </p>
                 )}
               </div>
@@ -1113,7 +1141,7 @@ export default function Home() {
                     Your browser does not support the video tag.
                   </video>
                   <p className="text-xs text-muted-foreground italic">
-                    This video is a mock response from a Firebase Function simulating a backend lip-sync process.
+                    This video is a mock response from an authenticated Firebase Function simulating a backend lip-sync process.
                   </p>
                 </div>
               )}
@@ -1127,6 +1155,11 @@ export default function Home() {
                   {firebaseVideoError.includes("Network error: Could not connect") && (
                     <p className="text-xs italic text-destructive/80 mt-1">
                       Tip: Ensure your Firebase emulator is running (if testing locally) and your <code>.env</code> file has the correct <code>NEXT_PUBLIC_FIREBASE_PROJECT_ID</code> and <code>NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL</code> (if applicable). The function name expected is <code>prepareLipSyncVideo</code> in region <code>us-central1</code>.
+                    </p>
+                  )}
+                   {firebaseVideoError.toLowerCase().includes("authentication failed") && (
+                    <p className="text-xs italic text-destructive/80 mt-1">
+                      Tip: Please ensure you are signed in. Your session might have expired.
                     </p>
                   )}
                 </div>
@@ -1226,4 +1259,3 @@ export default function Home() {
     </div>
   );
 }
-

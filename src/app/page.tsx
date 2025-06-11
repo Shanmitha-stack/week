@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Video, Film } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Sparkles } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame, type GenerateAnimatedFrameOutput } from '@/ai/flows/generate-animated-frame-flow';
 
@@ -33,11 +33,13 @@ export default function Home() {
 
   const [isSpeechSupported, setIsSpeechSupported] = useState<boolean>(false);
 
-  // States for "AI Animated Output (Mock Video)" section
-  const [isGeneratingVideoOutput, setIsGeneratingVideoOutput] = useState<boolean>(false);
-  const [aiStillFrameForVideoOutput, setAiStillFrameForVideoOutput] = useState<string | null>(null);
-  const [mockVideoUrl, setMockVideoUrl] = useState<string | null>(null);
-  const [videoOutputError, setVideoOutputError] = useState<string | null>(null);
+  // States for "AI Animated Output & Speech" section
+  const [isGeneratingAnimatedOutput, setIsGeneratingAnimatedOutput] = useState<boolean>(false);
+  const [animatedOutputAiFrame, setAnimatedOutputAiFrame] = useState<string | null>(null);
+  const [animatedOutputError, setAnimatedOutputError] = useState<string | null>(null);
+  const [isAnimatedOutputSpeaking, setIsAnimatedOutputSpeaking] = useState<boolean>(false);
+  const [isAnimatedOutputAnimating, setIsAnimatedOutputAnimating] = useState<boolean>(false);
+  const [displayedFrameInAnimatedOutput, setDisplayedFrameInAnimatedOutput] = useState<string | null>(null);
   
   const { toast } = useToast();
 
@@ -47,15 +49,32 @@ export default function Home() {
   const textForSimulatedClonedVoiceRef = useRef(textForSimulatedClonedVoice);
   const speakingTextRef = useRef(speakingText);
   const imagePreviewRef = useRef<string | null>(null);
-  const mockVideoUrlRef = useRef(mockVideoUrl);
+  
+  const animatedOutputAiFrameRef = useRef(animatedOutputAiFrame);
+  const isAnimatedOutputSpeakingRef = useRef(isAnimatedOutputSpeaking);
+  const isAnimatedOutputAnimatingRef = useRef(isAnimatedOutputAnimating);
+  const animatedOutputSpeakingTextContentRef = useRef<string | null>(null);
+  const displayedFrameInAnimatedOutputRef = useRef(displayedFrameInAnimatedOutput);
+  const animatedOutputFlickerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
 
   useEffect(() => {
     imagePreviewRef.current = imagePreview;
     if (!imagePreview) { 
-      setAiStillFrameForVideoOutput(null);
-      setMockVideoUrl(null);
-      setVideoOutputError(null);
+      setAnimatedOutputAiFrame(null);
+      setAnimatedOutputError(null);
+      setDisplayedFrameInAnimatedOutput(null);
+      if (isAnimatedOutputSpeakingRef.current || isAnimatedOutputAnimatingRef.current) {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+        setIsAnimatedOutputSpeaking(false);
+        if (animatedOutputFlickerIntervalRef.current) {
+          clearInterval(animatedOutputFlickerIntervalRef.current);
+          animatedOutputFlickerIntervalRef.current = null;
+        }
+        setIsAnimatedOutputAnimating(false);
+      }
     }
   }, [imagePreview]); 
 
@@ -65,7 +84,11 @@ export default function Home() {
   useEffect(() => { preparedSpeechTextRef.current = preparedSpeechText; }, [preparedSpeechText]);
   useEffect(() => { textForSimulatedClonedVoiceRef.current = textForSimulatedClonedVoice; }, [textForSimulatedClonedVoice]);
   useEffect(() => { speakingTextRef.current = speakingText; }, [speakingText]);
-  useEffect(() => { mockVideoUrlRef.current = mockVideoUrl; }, [mockVideoUrl]);
+
+  useEffect(() => { animatedOutputAiFrameRef.current = animatedOutputAiFrame; }, [animatedOutputAiFrame]);
+  useEffect(() => { isAnimatedOutputSpeakingRef.current = isAnimatedOutputSpeaking; }, [isAnimatedOutputSpeaking]);
+  useEffect(() => { isAnimatedOutputAnimatingRef.current = isAnimatedOutputAnimating; }, [isAnimatedOutputAnimating]);
+  useEffect(() => { displayedFrameInAnimatedOutputRef.current = displayedFrameInAnimatedOutput; }, [displayedFrameInAnimatedOutput]);
 
 
   useEffect(() => {
@@ -85,6 +108,11 @@ export default function Home() {
       setIsSpeaking(false); 
       setSpeakingText(null);
       setIsSimulatedClonedVoiceSpeaking(false);
+      setIsAnimatedOutputSpeaking(false);
+      if (animatedOutputFlickerIntervalRef.current) {
+        clearInterval(animatedOutputFlickerIntervalRef.current);
+      }
+      setIsAnimatedOutputAnimating(false);
     };
   }, []);
   
@@ -93,19 +121,25 @@ export default function Home() {
     setPreparedSpeechText(null);
     setTextForSimulatedClonedVoice(null); 
     
-    setAiStillFrameForVideoOutput(null);
-    setMockVideoUrl(null);
-    setVideoOutputError(null);
-
+    setAnimatedOutputAiFrame(null);
+    setAnimatedOutputError(null);
+    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Reset to original if available
 
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-        if (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current ) {
+        if (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current || isAnimatedOutputSpeakingRef.current ) {
             window.speechSynthesis.cancel(); 
         }
     }
     setIsSpeaking(false); 
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
+    setIsAnimatedOutputSpeaking(false);
+
+    if (animatedOutputFlickerIntervalRef.current) {
+      clearInterval(animatedOutputFlickerIntervalRef.current);
+      animatedOutputFlickerIntervalRef.current = null;
+    }
+    setIsAnimatedOutputAnimating(false);
   }, []);
 
 
@@ -117,16 +151,19 @@ export default function Home() {
       reader.onloadend = () => {
         const result = reader.result as string;
         setImagePreview(result);
+        setDisplayedFrameInAnimatedOutput(result); // Set initial frame for animated output
       };
       reader.onerror = () => {
         setSelectedImage(null); 
         setImagePreview(null);
+        setDisplayedFrameInAnimatedOutput(null);
         toast({ title: "Image Load Error", description: "Could not read the selected image file.", variant: "destructive" });
       }
       reader.readAsDataURL(file);
     } else {
       setSelectedImage(null);
       setImagePreview(null);
+      setDisplayedFrameInAnimatedOutput(null);
     }
     resetOutputsDependentOnTextOrImage();
   };
@@ -151,10 +188,17 @@ export default function Home() {
     setIsSpeaking(false); 
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false); 
+    setIsAnimatedOutputSpeaking(false); // Stop animated output speech too
     
-    setAiStillFrameForVideoOutput(null);
-    setMockVideoUrl(null);
-    setVideoOutputError(null);
+    setAnimatedOutputAiFrame(null); // Clear AI frame from other section
+    setAnimatedOutputError(null);
+    if (animatedOutputFlickerIntervalRef.current) {
+      clearInterval(animatedOutputFlickerIntervalRef.current);
+      animatedOutputFlickerIntervalRef.current = null;
+    }
+    setIsAnimatedOutputAnimating(false);
+    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current);
+
 
     setIsGeneratingSpeech(true);
     setPreparedSpeechText(null); 
@@ -270,6 +314,7 @@ export default function Home() {
       setIsSpeaking(true); 
       setSpeakingText(textToSpeak); 
       setIsSimulatedClonedVoiceSpeaking(false); 
+      setIsAnimatedOutputSpeaking(false); // Stop other speech
 
 
       setTimeout(() => {
@@ -318,12 +363,13 @@ export default function Home() {
     
     setTextForSimulatedClonedVoice(null);
 
-    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current)) {
+    if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current || isAnimatedOutputSpeakingRef.current)) {
         window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
+    setIsAnimatedOutputSpeaking(false);
   };
 
  const isPreparedTextAvailableAndUsable = () => {
@@ -358,6 +404,7 @@ export default function Home() {
     setIsSpeaking(false);
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false);
+    setIsAnimatedOutputSpeaking(false);
     
     setTextForSimulatedClonedVoice(null); 
     
@@ -415,6 +462,7 @@ export default function Home() {
     setIsSimulatedClonedVoiceSpeaking(true); 
     setIsSpeaking(false); 
     setSpeakingText(null);
+    setIsAnimatedOutputSpeaking(false);
     
     setTimeout(() => {
         if (!isSimulatedClonedVoiceSpeakingRef.current) { 
@@ -452,7 +500,7 @@ export default function Home() {
   }, [isSpeechSupported, toast]);
 
   
-  const getTextForVideoOutput = () => {
+  const getTextForAnimatedOutput = () => {
     if (textForSimulatedClonedVoiceRef.current && textForSimulatedClonedVoiceRef.current.trim() !== "") {
       return textForSimulatedClonedVoiceRef.current;
     } 
@@ -462,43 +510,67 @@ export default function Home() {
     return null;
   };
   
+  const stopAnimatedOutputFlicker = useCallback(() => {
+    if (animatedOutputFlickerIntervalRef.current) {
+      clearInterval(animatedOutputFlickerIntervalRef.current);
+      animatedOutputFlickerIntervalRef.current = null;
+    }
+    setIsAnimatedOutputAnimating(false);
+    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current || animatedOutputAiFrameRef.current); // Show AI frame if original is gone
+  }, []);
 
-  const handleGenerateVideoOutput = async () => {
-    const textForVideo = getTextForVideoOutput();
+  const startAnimatedOutputFlicker = useCallback(() => {
+    if (!imagePreviewRef.current || !animatedOutputAiFrameRef.current) {
+      stopAnimatedOutputFlicker();
+      return;
+    }
+    stopAnimatedOutputFlicker(); // Clear any existing interval
+    setIsAnimatedOutputAnimating(true);
+    animatedOutputFlickerIntervalRef.current = setInterval(() => {
+      setDisplayedFrameInAnimatedOutput(prev => 
+        prev === imagePreviewRef.current ? animatedOutputAiFrameRef.current : imagePreviewRef.current
+      );
+    }, 250); // Flicker interval
+  }, [stopAnimatedOutputFlicker]);
+
+
+  const handleGenerateAnimatedOutputAndSpeak = async () => {
+    const textToSpeak = getTextForAnimatedOutput();
   
     if (!selectedImage || !imagePreviewRef.current) {
       toast({ title: "Image Required", description: "Please upload an image in the 'Text & Image to Speech Preparation' section.", variant: "destructive" });
       return;
     }
-    if (!textForVideo) {
-      toast({ title: "Audio Text Required", description: "Please use 'Process Input for Speech' or 'Generate Speech with Cloned Voice (Mock)' first.", variant: "destructive" });
+    if (!textToSpeak) {
+      toast({ title: "Audio Text Required", description: "Please use 'Process Input for Speech' or 'Generate Speech with Cloned Voice (Mock)' first to generate text.", variant: "destructive" });
       return;
     }
   
-    setIsGeneratingVideoOutput(true);
-    setAiStillFrameForVideoOutput(null);
-    setMockVideoUrl(null);
-    setVideoOutputError(null);
+    setIsGeneratingAnimatedOutput(true);
+    setAnimatedOutputAiFrame(null);
+    setAnimatedOutputError(null);
+    animatedOutputSpeakingTextContentRef.current = textToSpeak;
     
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-            window.speechSynthesis.cancel();
-        }
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+          window.speechSynthesis.cancel();
+      }
     }
-    setIsSpeaking(false);
+    setIsSpeaking(false); // Stop other speech
     setSpeakingText(null);
-    setIsSimulatedClonedVoiceSpeaking(false);
+    setIsSimulatedClonedVoiceSpeaking(false); // Stop other speech
+    setIsAnimatedOutputSpeaking(false);
+    stopAnimatedOutputFlicker();
+    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Show original initially
 
-    toast({ title: "Generating Output...", description: "AI is creating an expressive frame and preparing mock video..." });
+    toast({ title: "Generating Output...", description: "AI is creating an expressive frame and preparing speech..." });
   
     let aiFrameResult: GenerateAnimatedFrameOutput | null = null;
-    let videoApiSucceeded = false;
 
     try {
       // 1. Generate AI Still Frame
       try {
-        const textSnippet = textForVideo.substring(0, 150);
-        // The prompt emphasizes visual changes for a speaking appearance.
+        const textSnippet = textToSpeak.substring(0, 150);
         const animationPrompt = `Your primary task is to transform the provided static photo into a single, highly expressive keyframe image. This new image must depict the person as if they are frozen mid-sentence, actively speaking the initial words of this text: "${textSnippet}". CRITICALLY, the generated image needs to show *clear visual changes* from the original photo, especially in the mouth shape (viseme) to precisely match the first phonemes of the text, and in the eye expression to convey engagement in speech. The overall facial expression should be dynamic and appropriate for the act of speaking these initial words. The primary output of this request MUST be the generated image.`;
         
         aiFrameResult = await generateAnimatedFrame({
@@ -507,7 +579,8 @@ export default function Home() {
         });
     
         if (aiFrameResult.generatedFrameDataUri) {
-          setAiStillFrameForVideoOutput(aiFrameResult.generatedFrameDataUri);
+          setAnimatedOutputAiFrame(aiFrameResult.generatedFrameDataUri);
+          setDisplayedFrameInAnimatedOutput(aiFrameResult.generatedFrameDataUri); // Show AI frame once loaded
         } else {
             let userFriendlyAiMessage = "The AI couldn't create an image for this request. This can happen sometimes. You could try again, perhaps with different text or a slightly different image.";
             if (aiFrameResult.errorMessage) {
@@ -515,73 +588,101 @@ export default function Home() {
                     ? "The AI model processed the request but did not return an image. You can try again." 
                     : aiFrameResult.errorMessage;
             }
-            console.warn('[GenerateVideoOutput] AI Frame Gen Issue:', aiFrameResult.errorMessage || 'AI model did not return an image.', 'Type:', aiFrameResult.errorType);
-            setVideoOutputError(userFriendlyAiMessage); // Set specific error for frame
+            console.warn('[GenerateAnimatedOutput] AI Frame Gen Issue:', aiFrameResult.errorMessage || 'AI model did not return an image.', 'Type:', aiFrameResult.errorType);
+            setAnimatedOutputError(userFriendlyAiMessage);
             toast({ title: "AI Image Not Generated", description: userFriendlyAiMessage, variant: "default", duration: 7000 });
+            setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Revert to original
         }
       } catch (frameError: any) {
-        console.error('[GenerateVideoOutput] Error during AI frame generation call:', frameError);
+        console.error('[GenerateAnimatedOutput] Error during AI frame generation call:', frameError);
         const message = frameError.message || "Failed to generate AI expressive frame.";
-        setVideoOutputError(message);
+        setAnimatedOutputError(message);
         toast({ title: "AI Frame Error", description: message, variant: "destructive" });
-        setIsGeneratingVideoOutput(false);
+        setIsGeneratingAnimatedOutput(false);
+        setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Revert to original
         return; // Stop if frame generation fails critically
       }
 
-      // 2. Fetch Mock Video URL from API
-      try {
-        const formData = new FormData();
-        formData.append('image', selectedImage); // selectedImage is File object
-        formData.append('textToSpeak', textForVideo);
-
-        const response = await fetch('/api/true-lip-sync-video', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ message: 'Failed to fetch mock video and could not parse error.' }));
-          throw new Error(errorData.message || `API responded with ${response.status}`);
-        }
-        const data = await response.json();
-        if (data.videoUrl) {
-          setMockVideoUrl(data.videoUrl);
-          videoApiSucceeded = true;
+      // 2. Play Speech & Start Animation
+      if (isSpeechSupported && textToSpeak) {
+        if (aiFrameResult?.generatedFrameDataUri) {
+             toast({ title: "AI Frame Ready!", description: "Speaking the text with animation...", duration: 4000 });
         } else {
-          throw new Error('Mock video API did not return a video URL.');
+             toast({ title: "AI Frame Failed", description: "Speaking the text with original image...", duration: 5000 });
         }
-      } catch (videoError: any) {
-        console.error('[GenerateVideoOutput] Error fetching mock video URL:', videoError);
-        const message = videoError.message || "Failed to fetch mock video URL.";
-        setVideoOutputError((prevError) => prevError ? `${prevError} Additionally: ${message}` : message); // Append or set error
-        toast({ title: "Mock Video Error", description: message, variant: "destructive" });
-        // Don't return here, still show AI frame if it succeeded
-      }
 
-      if (aiFrameResult?.generatedFrameDataUri && videoApiSucceeded) {
-        toast({ title: "Output Ready", description: "AI expressive frame and mock video are ready.", duration: 4000 });
-      } else if (aiFrameResult?.generatedFrameDataUri && !videoApiSucceeded) {
-        toast({ title: "Partial Output", description: "AI expressive frame is ready, but mock video failed to load.", duration: 5000 });
-      } else if (!aiFrameResult?.generatedFrameDataUri && videoApiSucceeded) {
-         // This case is handled by the AI frame error toast, but good to be aware
+        // Slight delay to ensure state updates for AI frame are processed
+        setTimeout(() => {
+          if (animatedOutputSpeakingTextContentRef.current !== textToSpeak || !isGeneratingAnimatedOutputRef.current) {
+            // If text changed or generation was cancelled
+            setIsGeneratingAnimatedOutput(false);
+            return;
+          }
+
+          const utterance = new SpeechSynthesisUtterance(textToSpeak);
+          utterance.onstart = () => {
+            setIsAnimatedOutputSpeaking(true);
+            if (animatedOutputAiFrameRef.current && imagePreviewRef.current) { // Only animate if both frames exist
+              startAnimatedOutputFlicker();
+            }
+          };
+          utterance.onend = () => {
+            setIsAnimatedOutputSpeaking(false);
+            stopAnimatedOutputFlicker();
+            setIsGeneratingAnimatedOutput(false); 
+          };
+          utterance.onerror = (event) => {
+            let toastMessage = `Could not play animated output speech. (Error: ${event.error || 'unknown'})`;
+            let toastTitle = "Animated Speech Error";
+            let toastVariant: "destructive" | "default" = "destructive";
+            if (event.error === 'interrupted') {
+              toastTitle = "Animated Speech Interrupted";
+              toastMessage = "Animated output playback was interrupted.";
+              toastVariant = "default";
+            }
+            toast({ title: toastTitle, description: toastMessage, variant: toastVariant });
+            setIsAnimatedOutputSpeaking(false);
+            stopAnimatedOutputFlicker();
+            setIsGeneratingAnimatedOutput(false);
+          };
+          window.speechSynthesis.speak(utterance);
+        }, 100);
+      } else {
+        toast({ title: "Speech Not Available", description: "Browser speech not supported or no text for animation.", duration: 5000 });
+        setIsGeneratingAnimatedOutput(false); // End loading if not speaking
       }
-      // If both failed, individual error toasts would have shown.
 
     } catch (error: any) { 
-      // This catch is for unexpected errors in the orchestrating logic itself
-      console.error('[GenerateVideoOutput] General client-side processing error:', error);
+      console.error('[GenerateAnimatedOutput] General client-side processing error:', error);
       const message = error.message || "An unexpected client-side error occurred.";
-      setVideoOutputError(message);
+      setAnimatedOutputError(message);
       toast({ title: "Client Error", description: message, variant: "destructive" });
-    } finally {
-      setIsGeneratingVideoOutput(false);
+      setIsGeneratingAnimatedOutput(false);
+      setDisplayedFrameInAnimatedOutput(imagePreviewRef.current);
+    } 
+    // isGeneratingAnimatedOutput is set to false inside speech handlers or if speech is skipped
+  };
+
+  const handleStopAnimatedOutput = () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel(); // This will trigger onend/onerror for the utterance
     }
+    setIsAnimatedOutputSpeaking(false); // Explicitly set, as cancel might be async
+    stopAnimatedOutputFlicker();
+    // isGeneratingAnimatedOutput should already be false if we are in a "stoppable" state
+    // If it was mid-generation, the button wouldn't be for stopping.
+    // If it's clicked after generation and speech has ended but animation is manually kept, 
+    // then isGeneratingAnimatedOutput is false.
   };
   
   
-  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingVideoOutput;
+  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingAnimatedOutput;
   const currentPreparedTextIsSpeaking = isSpeaking && preparedSpeechText && speakingText === preparedSpeechText;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoiceRef.current && textForSimulatedClonedVoiceRef.current === textForSimulatedClonedVoiceRef.current;
+
+  const isGeneratingAnimatedOutputRef = useRef(isGeneratingAnimatedOutput);
+  useEffect(() => { isGeneratingAnimatedOutputRef.current = isGeneratingAnimatedOutput; }, [isGeneratingAnimatedOutput]);
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -652,7 +753,7 @@ export default function Home() {
                         onClick={handleSpeakPreparedText}
                         variant="outline"
                         size="sm"
-                        disabled={anyLoading || isSimulatedClonedVoiceSpeaking }
+                        disabled={anyLoading || isSimulatedClonedVoiceSpeaking || isAnimatedOutputSpeaking }
                       >
                         {currentPreparedTextIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking</> : <><Volume2 className="mr-2 h-4 w-4" />Speak</>}
                       </Button>
@@ -704,7 +805,7 @@ export default function Home() {
                     onClick={handlePlaySimulatedClonedVoice}
                     variant="outline"
                     size="sm"
-                    disabled={anyLoading || (isSpeaking && !isSimulatedClonedVoiceSpeakingRef.current && speakingText !== textForSimulatedClonedVoiceRef.current) }
+                    disabled={anyLoading || (isSpeaking && !isSimulatedClonedVoiceSpeakingRef.current && speakingText !== textForSimulatedClonedVoiceRef.current) || isAnimatedOutputSpeaking }
                    >
                      {currentSimulatedClonedVoiceIsSpeaking ? <><StopCircle className="mr-2 h-4 w-4" />Stop Simulated Voice</> : <><Volume2 className="mr-2 h-4 w-4" />Play Simulated Cloned Voice</>}
                    </Button>
@@ -716,54 +817,59 @@ export default function Home() {
             </div>
           </SectionCard>
 
-          <SectionCard title="AI Animated Output (Mock Video)" icon={<Video className="text-primary" />}>
+          <SectionCard title="AI Animated Output & Speech" icon={<Sparkles className="text-primary" />}>
             <div className="space-y-4">
                <div>
-                <Label htmlFor="video-output-info" className="text-base">Image &amp; Audio Source for Output:</Label>
+                <Label htmlFor="animated-output-info" className="text-base">Image &amp; Audio Source for Output:</Label>
                  {imagePreview ? (
-                    <p className="text-sm text-muted-foreground mt-1" id="video-output-info">
-                      Using your uploaded image for an AI expressive still frame. A mock video with its own audio will be played.
+                    <p className="text-sm text-muted-foreground mt-1" id="animated-output-info">
+                      Using your uploaded image for AI expressive frame generation and flicker animation. Audio will be synthesized from prepared text.
                     </p>
                   ) : (
-                    <p className="text-sm text-muted-foreground mt-1" id="video-output-info">
+                    <p className="text-sm text-muted-foreground mt-1" id="animated-output-info">
                       Please upload an image and prepare audio text in the sections above.
                     </p>
                   )}
               </div>
 
               <Button
-                onClick={handleGenerateVideoOutput}
-                disabled={anyLoading || !imagePreview || !getTextForVideoOutput()}
+                onClick={isAnimatedOutputSpeaking || isAnimatedOutputAnimating ? handleStopAnimatedOutput : handleGenerateAnimatedOutputAndSpeak}
+                disabled={(isGeneratingAnimatedOutput && !(isAnimatedOutputSpeaking || isAnimatedOutputAnimating)) || !imagePreview || !getTextForAnimatedOutput()}
                 className="w-full sm:w-auto"
               >
-                {isGeneratingVideoOutput ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Video className="mr-2 h-4 w-4" />}
-                Generate Animated Output (Mock Video)
+                {isGeneratingAnimatedOutput && !(isAnimatedOutputSpeaking || isAnimatedOutputAnimating) ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating Output...</>
+                ) : isAnimatedOutputSpeaking || isAnimatedOutputAnimating ? (
+                    <><StopCircle className="mr-2 h-4 w-4" />Stop Speaking & Animating</>
+                ) : (
+                    <><Sparkles className="mr-2 h-4 w-4" />Generate & Play Animated Output</>
+                )}
               </Button>
               
               <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow relative min-h-[250px] space-y-6">
                 <div>
                     <Label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-2">
                         <ImagePlus className="h-5 w-5"/>
-                        AI Expressive Still Frame:
+                        Animated Image:
                     </Label>
                     <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden min-h-[200px] max-h-[300px] relative">
-                    {isGeneratingVideoOutput && !aiStillFrameForVideoOutput && !videoOutputError ? ( 
+                    {isGeneratingAnimatedOutput && !displayedFrameInAnimatedOutput && !animatedOutputError ? ( 
                         <div className="flex flex-col items-center justify-center text-center p-4">
                         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
                         <p className="text-lg font-semibold text-white">Generating AI Frame...</p>
                         </div>
-                    ) : aiStillFrameForVideoOutput ? (
+                    ) : displayedFrameInAnimatedOutput ? (
                         <Image
-                            key={aiStillFrameForVideoOutput} 
-                            src={aiStillFrameForVideoOutput}
-                            alt="AI generated expressive frame"
+                            key={displayedFrameInAnimatedOutput} 
+                            src={displayedFrameInAnimatedOutput}
+                            alt="AI generated expressive frame or original image"
                             fill
                             style={{ objectFit: 'contain' }}
                             className="rounded-md bg-black"
                             priority={true} 
-                            data-ai-hint="expressive speaking frame"
+                            data-ai-hint="animated expressive speaking frame"
                         />
-                    ) : imagePreviewRef.current && !videoOutputError?.includes("AI Frame Error") && !videoOutputError?.includes("AI Image Not Generated") ? ( 
+                    ) : imagePreviewRef.current ? ( 
                          <Image
                             src={imagePreviewRef.current}
                             alt="Original uploaded image (AI frame pending or issue)"
@@ -775,55 +881,20 @@ export default function Home() {
                     ) : ( 
                         <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
                         <ImagePlus className="h-12 w-12 mb-4 text-muted-foreground/50" data-ai-hint="image placeholder" />
-                        <p className="text-lg font-semibold">AI expressive frame will appear here</p>
+                        <p className="text-lg font-semibold">Animated output will appear here</p>
                         </div>
                     )}
                     </div>
                 </div>
-
-                <div>
-                    <Label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-2">
-                        <Film className="h-5 w-5"/>
-                        Mock Animated Video:
-                    </Label>
-                    <div className="bg-black rounded-md flex items-center justify-center aspect-video overflow-hidden min-h-[200px] max-h-[300px] relative">
-                        {isGeneratingVideoOutput && !mockVideoUrl && !videoOutputError?.includes("Mock Video Error") ? (
-                             <div className="flex flex-col items-center justify-center text-center p-4">
-                                <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-                                <p className="text-lg font-semibold text-white">Loading Mock Video...</p>
-                             </div>
-                        ) : mockVideoUrl ? (
-                            <video
-                                key={mockVideoUrl} // Ensures re-render if URL changes
-                                src={mockVideoUrl}
-                                controls
-                                autoPlay
-                                // muted // Often needed for autoplay to work in browsers
-                                className="w-full h-full rounded-md"
-                                onError={(e) => {
-                                    console.error("Video playback error:", e);
-                                    setVideoOutputError((prev) => (prev ? `${prev} Video playback error.` : "Video playback error. Check console."));
-                                    toast({title: "Video Playback Error", description: "Could not play the mock video. Check browser console.", variant: "destructive", duration: 7000});
-                                }}
-                            />
-                        ) : (
-                            <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
-                                <Film className="h-12 w-12 mb-4 text-muted-foreground/50" data-ai-hint="video placeholder" />
-                                <p className="text-lg font-semibold">Mock video will appear here</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
                 
-                {videoOutputError && ( 
+                {animatedOutputError && ( 
                   <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
                       <AlertTriangle className="h-5 w-5"/>
-                      <p>Output Generation Issue: {videoOutputError}</p>
+                      <p>Output Generation Issue: {animatedOutputError}</p>
                   </div>
                 )}
                  <p className="text-xs text-muted-foreground mt-2 italic">
-                    This feature generates an AI expressive still frame from your image and plays a mock video with its own audio.
-                    A real lip-sync system would combine the AI-animated face with the audio into a single video.
+                    This feature generates an AI expressive still frame from your image, animates it through flickering, and plays browser-synthesized audio from your prepared text.
                   </p>
               </div>
             </div>
@@ -836,5 +907,3 @@ export default function Home() {
     </div>
   );
 }
-
-    

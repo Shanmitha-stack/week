@@ -12,29 +12,39 @@ export async function POST(request: Request) {
     const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     const functionsEmulatorUrl = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL;
 
+    // Server-side logging for diagnostics
+    console.log(`[API /api/firebase-lip-sync] Received NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${projectId}`);
+    console.log(`[API /api/firebase-lip-sync] Received NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL: ${functionsEmulatorUrl}`);
+
     let functionUrl: string;
 
-    // Validate Project ID more robustly
-    const isInvalidProjectId = !projectId || 
-                               projectId.trim() === "" || 
-                               projectId.toLowerCase().includes("your_project_id") || // Catches "YOUR_PROJECT_ID", "your_project_id_here", etc.
-                               projectId.length < 4; // Arbitrary short length check for obviously invalid IDs
+    // More robust check for invalid Project ID
+    const trimmedProjectId = projectId ? projectId.trim() : "";
+    const isPlaceholderProjectId = trimmedProjectId.toUpperCase() === "YOUR_PROJECT_ID" ||
+                                   trimmedProjectId.toLowerCase().includes("your_project_id") || // Catches "your_project_id_here" etc.
+                                   trimmedProjectId.toLowerCase().startsWith("your-project") || // Catches "your-project-id"
+                                   trimmedProjectId.length < 4; // Arbitrary short length check
 
-    if (isInvalidProjectId) {
-      const errorMessage = `Backend configuration error: Firebase project ID ('${projectId || 'Not found'}') is missing or invalid. Please set NEXT_PUBLIC_FIREBASE_PROJECT_ID correctly in your .env file.`;
-      console.error(`[API /api/firebase-lip-sync] ${errorMessage}`);
+    if (!trimmedProjectId || isPlaceholderProjectId) {
+      const errorMessage = `Backend configuration error: Firebase project ID ('${projectId || 'Not found/empty'}') is missing or appears to be a placeholder. Please set NEXT_PUBLIC_FIREBASE_PROJECT_ID correctly in your .env file. This value is used to construct the Firebase Function URL.`;
+      console.error(`[API /api/firebase-lip-sync] Configuration Error: ${errorMessage}`);
       return NextResponse.json({ message: errorMessage }, { status: 500 });
     }
 
     if (functionsEmulatorUrl) {
-      functionUrl = `${functionsEmulatorUrl}/${projectId}/us-central1/prepareLipSyncVideo`;
+      // Ensure emulator URL doesn't also contain a placeholder if project ID was valid above
+      if (functionsEmulatorUrl.includes("YOUR_PROJECT_ID") || functionsEmulatorUrl.includes("YOUR_PROJECT_ID_HERE")) {
+        const emulatorUrlError = `Backend configuration error: Firebase functions emulator URL ('${functionsEmulatorUrl}') appears to contain a placeholder project ID. Please check NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL in your .env file.`;
+        console.error(`[API /api/firebase-lip-sync] Configuration Error: ${emulatorUrlError}`);
+        return NextResponse.json({ message: emulatorUrlError }, { status: 500 });
+      }
+      functionUrl = `${functionsEmulatorUrl}/${trimmedProjectId}/us-central1/prepareLipSyncVideo`;
     } else {
-      functionUrl = `https://us-central1-${projectId}.cloudfunctions.net/prepareLipSyncVideo`;
+      functionUrl = `https://us-central1-${trimmedProjectId}.cloudfunctions.net/prepareLipSyncVideo`;
     }
 
     console.log(`[API /api/firebase-lip-sync] Calling Firebase Function at: ${functionUrl}`);
     console.log(`[API /api/firebase-lip-sync] Sending to Firebase Function: text (len: ${typeof textToSpeak === 'string' ? textToSpeak.length : 'N/A'}), imageId: ${imageId}`);
-
 
     const firebaseResponse = await fetch(functionUrl, {
       method: 'POST',
@@ -49,13 +59,11 @@ export async function POST(request: Request) {
       try {
         const fbErrorData = await firebaseResponse.json();
         errorBody = fbErrorData.message || fbErrorData.error || errorBody;
-         // Add more specific check for common function errors like "Function not found"
         if (firebaseResponse.status === 404 && typeof fbErrorData.error === 'string' && fbErrorData.error.includes('Function not found')) {
             errorBody = `Firebase Function 'prepareLipSyncVideo' not found at ${functionUrl}. Ensure the function is deployed to region 'us-central1' or the emulator is running with the correct function name. Original error: ${fbErrorData.error}`;
         } else if (firebaseResponse.status === 500 && typeof fbErrorData.error === 'string' && fbErrorData.error.includes('INTERNAL')) {
              errorBody = `Firebase Function 'prepareLipSyncVideo' encountered an internal error at ${functionUrl}. Check function logs. Original error: ${fbErrorData.error}`;
         }
-
       } catch (e) {
         console.warn(`[API /api/firebase-lip-sync] Could not parse error response body from Firebase Function. Raw status text: ${firebaseResponse.statusText}`);
       }
@@ -65,20 +73,14 @@ export async function POST(request: Request) {
 
     const firebaseData = await firebaseResponse.json();
     console.log('[API /api/firebase-lip-sync] Received from Firebase Function:', firebaseData);
-
     return NextResponse.json(firebaseData);
 
   } catch (error: any) {
     console.error('[API /api/firebase-lip-sync] Critical error processing request:', error);
-    let detailedErrorMessage = 'Critical error in the backend API when trying to communicate with Firebase Function.';
     
-    const projectIdForError = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    const displayProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "UNKNOWN_PROJECT_ID";
     const emulatorUrlForError = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL;
-    
-    // Construct the target URL again for error context, respecting potential invalid projectId
-    const displayProjectId = (!projectIdForError || projectIdForError.trim() === "" || projectIdForError.toLowerCase().includes("your_project_id")) 
-        ? "YOUR_INVALID_PROJECT_ID" 
-        : projectIdForError;
+    let detailedErrorMessage = `Critical error in the backend API when trying to communicate with Firebase Function for project '${displayProjectId}'.`;
 
     const targetFunctionUrlForError = emulatorUrlForError 
         ? `${emulatorUrlForError}/${displayProjectId}/us-central1/prepareLipSyncVideo` 

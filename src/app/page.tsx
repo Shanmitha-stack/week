@@ -304,9 +304,15 @@ export default function Home() {
         });
       }
     } catch (error) {
-      const errorMessage = "Error: Could not process input for speech.";
-      setPreparedSpeechText(errorMessage); 
-      toast({ title: "Processing Error", description: error instanceof Error ? `${errorMessage} ${error.message}`: errorMessage, variant: "destructive" });
+      const userMessage = "An AI processing error occurred while preparing your input. If an image was included, you might try again with a different image or without the image. If the problem persists, the AI service could be temporarily unavailable or experiencing issues.";
+      setPreparedSpeechText("Error: AI processing failed for speech preparation.");
+      console.error("Processing Error in 'handleTextToSpeech' (calling prepareTextForSpeech flow):", error);
+      toast({
+        title: "AI Processing Error",
+        description: userMessage,
+        variant: "destructive",
+        duration: 8000 
+      });
     } finally {
       setIsGeneratingSpeech(false);
     }

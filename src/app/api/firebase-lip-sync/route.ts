@@ -14,22 +14,21 @@ export async function POST(request: Request) {
 
     let functionUrl: string;
 
+    // Validate Project ID
+    if (!projectId || projectId === "YOUR_PROJECT_ID_HERE" || projectId.trim() === "") {
+      const errorMessage = 'Backend configuration error: Firebase project ID is missing or invalid. Please set NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env file.';
+      console.error(`[API /api/firebase-lip-sync] ${errorMessage}`);
+      return NextResponse.json({ message: errorMessage }, { status: 500 });
+    }
+
     if (functionsEmulatorUrl) {
-      if (!projectId || projectId === "YOUR_PROJECT_ID_HERE" || projectId.trim() === "") {
-        console.error('[API /api/firebase-lip-sync] Firebase project ID is missing or invalid for emulator URL. Set NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env file.');
-        return NextResponse.json({ message: 'Backend configuration error: Firebase project ID is required for emulator connection. Please update your .env file.' }, { status: 500 });
-      }
       functionUrl = `${functionsEmulatorUrl}/${projectId}/us-central1/prepareLipSyncVideo`;
     } else {
-      if (!projectId || projectId === "YOUR_PROJECT_ID_HERE" || projectId.trim() === "") {
-        console.error('[API /api/firebase-lip-sync] Firebase project ID is missing or invalid for deployed function URL. Set NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env file.');
-        return NextResponse.json({ message: 'Backend configuration error: Firebase project ID is required for deployed function. Please update your .env file.' }, { status: 500 });
-      }
       functionUrl = `https://us-central1-${projectId}.cloudfunctions.net/prepareLipSyncVideo`;
     }
 
     console.log(`[API /api/firebase-lip-sync] Calling Firebase Function at: ${functionUrl}`);
-    console.log(`[API /api/firebase-lip-sync] Sending to Firebase Function: text (len: ${textToSpeak.length}), imageId: ${imageId}`);
+    console.log(`[API /api/firebase-lip-sync] Sending to Firebase Function: text (len: ${typeof textToSpeak === 'string' ? textToSpeak.length : 'N/A'}), imageId: ${imageId}`);
 
 
     const firebaseResponse = await fetch(functionUrl, {
@@ -41,14 +40,21 @@ export async function POST(request: Request) {
     });
 
     if (!firebaseResponse.ok) {
-      let errorBody = 'Failed to call Firebase Function.';
+      let errorBody = `Failed to call Firebase Function at ${functionUrl}. Status: ${firebaseResponse.status}`;
       try {
         const fbErrorData = await firebaseResponse.json();
         errorBody = fbErrorData.message || fbErrorData.error || errorBody;
+         // Add more specific check for common function errors like "Function not found"
+        if (firebaseResponse.status === 404 && typeof fbErrorData.error === 'string' && fbErrorData.error.includes('Function not found')) {
+            errorBody = `Firebase Function not found at ${functionUrl}. Ensure the function is deployed or the emulator is running with the correct function name. Original error: ${fbErrorData.error}`;
+        } else if (firebaseResponse.status === 500 && typeof fbErrorData.error === 'string' && fbErrorData.error.includes('INTERNAL')) {
+             errorBody = `Firebase Function encountered an internal error at ${functionUrl}. Check function logs. Original error: ${fbErrorData.error}`;
+        }
+
       } catch (e) {
-        // Ignore if parsing error body fails
+        console.warn(`[API /api/firebase-lip-sync] Could not parse error response body from Firebase Function. Raw status text: ${firebaseResponse.statusText}`);
       }
-      console.error(`[API /api/firebase-lip-sync] Firebase Function call failed with status ${firebaseResponse.status}: ${errorBody}`);
+      console.error(`[API /api/firebase-lip-sync] Firebase Function call failed: ${errorBody}`);
       return NextResponse.json({ message: `Error from Firebase Function: ${errorBody}`, statusText: firebaseResponse.statusText }, { status: firebaseResponse.status });
     }
 
@@ -58,20 +64,13 @@ export async function POST(request: Request) {
     return NextResponse.json(firebaseData);
 
   } catch (error: any) {
-    console.error('[API /api/firebase-lip-sync] Error processing request:', error);
-    // This error message is what the frontend currently receives if fetch() itself throws.
-    let detailedErrorMessage = 'Error processing backend request to Firebase Function.';
-    if (error.message) {
-        // Check for common fetch errors to provide more specific guidance
-        if (error.message.includes('ECONNREFUSED') || error.message.includes('fetch failed')) {
-            detailedErrorMessage = 'Could not connect to the Firebase Function. Ensure the emulator is running or the deployed function URL is correct and accessible.';
-        } else if (error.message.includes('Invalid URL')) {
-            detailedErrorMessage = 'The Firebase Function URL is invalid. Check project ID and emulator configuration.';
-        } else {
-            detailedErrorMessage = `An unexpected error occurred in the backend API: ${error.message}`;
-        }
+    console.error('[API /api/firebase-lip-sync] Critical error processing request:', error);
+    let detailedErrorMessage = 'Critical error in the backend API when trying to communicate with Firebase Function.';
+    if (error.name === 'TypeError' && error.message.includes('fetch failed')) {
+        detailedErrorMessage = 'Network error: Could not connect to the Firebase Function. Ensure the emulator is running and accessible at the configured URL, or the deployed function URL is correct and the function is deployed.';
+    } else if (error.message) {
+        detailedErrorMessage = `An unexpected error occurred in the backend API: ${error.message}`;
     }
     return NextResponse.json({ message: detailedErrorMessage, error: error.message || 'Unknown error' }, { status: 500 });
   }
 }
-

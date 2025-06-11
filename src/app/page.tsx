@@ -17,7 +17,7 @@ import { generateAnimatedFrame, type GenerateAnimatedFrameOutput } from '@/ai/fl
 import { storage, auth, functions as firebaseFunctions } from '@/lib/firebase'; // Firebase Storage, Auth, and Functions
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { httpsCallable, connectFunctionsEmulator as fbConnectFunctionsEmulator, type HttpsError } from 'firebase/functions';
-import { signInAnonymously } from 'firebase/auth';
+import { signInAnonymously, type User } from 'firebase/auth';
 
 
 export default function Home() {
@@ -147,6 +147,7 @@ export default function Home() {
         
         console.log(`Attempting to connect Firebase Functions emulator to host: ${host}, port: ${port}`);
         fbConnectFunctionsEmulator(firebaseFunctions, host, port);
+        toast({ title: "Emulator Connected", description: `Firebase Functions emulator connected to ${host}:${port}`, duration: 3000 });
       } catch (e: any) {
         console.error("Error parsing or connecting to Firebase Functions emulator URL:", functionsEmulatorUrl, e);
         toast({ 
@@ -345,10 +346,12 @@ export default function Home() {
         });
       }
     } catch (error: any) {
-      const userMessage = "An AI processing error occurred while preparing your input. This might be due to the AI model having trouble with the provided image (if any) or text. You could try again with a different image, modify the text, or try without an image. If the problem persists, the AI service could be temporarily unavailable.";
+      let userMessage = "An AI processing error occurred while preparing your input. This might be due to the AI model having trouble with the provided image (if any) or text. You could try again with a different image, modify the text, or try without an image. If the problem persists, the AI service could be temporarily unavailable.";
       let detailedErrorMessage = (error as Error).message;
-      if (detailedErrorMessage?.includes("AI model processed the request but did not return an image") || detailedErrorMessage?.includes("did not return a media URL")) {
-          detailedErrorMessage = "The AI model had an issue, possibly with the image. Try a different image or no image.";
+      if (detailedErrorMessage?.includes("AI model processed the request but did not return an image") || detailedErrorMessage?.includes("did not return a media URL") || detailedErrorMessage?.toLowerCase().includes("invalid image data")) {
+          userMessage = "The AI model had an issue, possibly with the image. Please try a different image, a smaller image, a different format (e.g. JPG/PNG), or try preparing text without an image.";
+      } else if (detailedErrorMessage?.includes("Deadline Exceeded") || detailedErrorMessage?.includes("upstream timeout")) {
+          userMessage = "The AI request timed out. This might be a temporary issue. Please try again in a moment.";
       }
       setPreparedSpeechText("Error: Could not process input for speech. " + detailedErrorMessage);
       console.error("Processing Error in 'handleTextToSpeech' (calling prepareTextForSpeech flow):", error);
@@ -356,7 +359,7 @@ export default function Home() {
         title: "AI Processing Error",
         description: userMessage,
         variant: "destructive",
-        duration: 10000 
+        duration: 12000 
       });
     } finally {
       setIsGeneratingSpeech(false);
@@ -767,14 +770,12 @@ export default function Home() {
 
 
   const handleGenerateFirebaseLipSyncVideo = async () => {
-    const currentPreparedText = preparedSpeechTextRef.current;
-
     if (!selectedImage || !imagePreviewRef.current) {
       toast({ title: "Image Required", description: "Please upload an image.", variant: "destructive" });
       return;
     }
-    if (!currentPreparedText) {
-      toast({ title: "Prepared Text Required", description: "Please process text for speech first.", variant: "destructive" });
+    if (!selectedVoiceSample) {
+      toast({ title: "Voice Sample Required", description: "Please select a voice sample in the 'Voice Cloning' section.", variant: "destructive" });
       return;
     }
 
@@ -782,42 +783,44 @@ export default function Home() {
     setFirebaseVideoUrl(null);
     setFirebaseVideoError(null);
     
-    try {
-      let currentUser = auth.currentUser;
-      if (!currentUser) {
-        toast({ title: "Attempting Anonymous Sign-In", description: "No user signed in. Attempting to sign in anonymously..." });
-        try {
-          await signInAnonymously(auth);
-          currentUser = auth.currentUser; 
-          if (currentUser) {
-            toast({ title: "Anonymous Sign-In Successful", description: "Proceeding with video generation." });
-          } else {
-             throw new Error("Anonymous sign-in completed but currentUser is still null.");
-          }
-        } catch (anonError: any) {
-          console.error("[Callable Call] Anonymous sign-in failed:", anonError);
-          const errorMessage = anonError.message || "Unknown error during anonymous sign-in.";
-          setFirebaseVideoError(`Anonymous sign-in failed: ${errorMessage}. Cannot call function.`);
-          toast({ title: "Anonymous Sign-In Failed", description: `Could not sign in anonymously: ${errorMessage}`, variant: "destructive", duration: 7000 });
-          setIsGeneratingFirebaseVideo(false);
-          return;
+    let currentUser: User | null = auth.currentUser;
+
+    if (!currentUser) {
+      toast({ title: "Attempting Anonymous Sign-In", description: "No user signed in. Attempting to sign in anonymously for this action..." });
+      try {
+        const userCredential = await signInAnonymously(auth);
+        currentUser = userCredential.user;
+        if (currentUser) {
+          toast({ title: "Anonymous Sign-In Successful", description: "Proceeding with video generation.", duration: 3000 });
+        } else {
+           throw new Error("Anonymous sign-in completed but currentUser is still null."); // Should not happen
         }
-      }
-      
-      if (!currentUser) {
-        setFirebaseVideoError("Authentication failed. No user available after sign-in attempt.");
-        toast({ title: "Authentication Error", description: "No user available after sign-in attempt. Please try again.", variant: "destructive" });
+      } catch (anonError: any) {
+        console.error("[Callable Call] Anonymous sign-in failed:", anonError);
+        const errorMessage = anonError.message || "Unknown error during anonymous sign-in.";
+        let finalErrorMessage = `Anonymous sign-in failed: ${errorMessage}. Cannot call function. (Code: ${anonError.code || 'N/A'})`;
+        setFirebaseVideoError(finalErrorMessage);
+        toast({ title: "Anonymous Sign-In Failed", description: finalErrorMessage, variant: "destructive", duration: 8000 });
         setIsGeneratingFirebaseVideo(false);
         return;
       }
-
-      toast({ title: "Requesting Video...", description: `Authenticated as UID: ${currentUser.uid.substring(0,10)}... (Anonymous: ${currentUser.isAnonymous})` });
-      console.log(`[Callable Call] User UID: ${currentUser.uid} (Is Anonymous: ${currentUser.isAnonymous})`);
-      console.log("[Callable Call] Invoking 'prepareLipSyncVideo' Firebase Callable Function with text (len):", currentPreparedText.length, "and imageId:", selectedImage.name);
+    }
       
+    if (!currentUser) { // Should be redundant given above, but as a safeguard
+      setFirebaseVideoError("Authentication failed. No user available after sign-in attempt.");
+      toast({ title: "Authentication Error", description: "No user available after sign-in attempt. Please try again.", variant: "destructive" });
+      setIsGeneratingFirebaseVideo(false);
+      return;
+    }
+    
+    toast({ title: "Requesting Video (Callable)...", description: `Authenticated as UID: ${currentUser.uid.substring(0,10)}... (Anonymous: ${currentUser.isAnonymous})` });
+    console.log(`[Callable Call] User UID: ${currentUser.uid} (Is Anonymous: ${currentUser.isAnonymous})`);
+    console.log("[Callable Call] Invoking 'prepareLipSyncVideo' Firebase Callable Function with audioFileName:", selectedVoiceSample.name, "and imageId:", selectedImage.name);
+    
+    try {
       const callPrepareLipSyncVideo = httpsCallable(firebaseFunctions, 'prepareLipSyncVideo');
       const result = await callPrepareLipSyncVideo({
-        textToSpeak: currentPreparedText,
+        audioFileName: selectedVoiceSample.name,
         imageId: selectedImage.name || "uploaded_image" 
       });
 
@@ -828,35 +831,35 @@ export default function Home() {
         setFirebaseVideoUrl(data.mockVideoUrl);
         toast({ title: "Callable Function Success", description: data.message || "Mock video URL received.", duration: 5000 });
       } else {
-        const noUrlErrorMsg = data?.message || data?.error || "Callable Function did not return a video URL in the expected format.";
+        const noUrlErrorMsg = data?.message || data?.error || "Callable Function did not return a video URL or had an issue.";
         console.error("[Callable Call] Callable Function response missing mockVideoUrl or malformed:", data);
-        setFirebaseVideoError(`Callable Function Response Error: ${noUrlErrorMsg}`);
-        toast({ title: "Callable Function Response Error", description: noUrlErrorMsg, variant: "destructive" });
+        setFirebaseVideoError(`Callable Function Response Issue: ${noUrlErrorMsg}`);
+        toast({ title: "Callable Function Response Issue", description: noUrlErrorMsg, variant: "destructive" });
       }
 
-    } catch (error: any) {
+    } catch (error: any) { // Catches HttpsError from callable function
       console.error("[Callable Call] Error calling 'prepareLipSyncVideo' Firebase Callable Function:", error);
-      let finalErrorMessage = "An unexpected error occurred when calling the Firebase Function.";
-      let toastTitle = "Callable Function Call Error";
-      
       const httpsError = error as HttpsError;
-      if (httpsError.code && httpsError.message) { 
+      let finalErrorMessage = "An unexpected error occurred when calling the Firebase Function.";
+      let toastTitle = "Callable Function Error";
+
+      if (httpsError.code && httpsError.message) {
         toastTitle = `Function Error: ${httpsError.code}`;
         finalErrorMessage = `Firebase Function Error: ${httpsError.message} (Code: ${httpsError.code})`;
         if (httpsError.details) {
           finalErrorMessage += ` Details: ${JSON.stringify(httpsError.details)}`;
         }
         if (httpsError.code === 'unauthenticated') {
-          finalErrorMessage += " The function reported an unauthenticated user. This might happen if the anonymous session failed or if the token was rejected.";
+            finalErrorMessage += " The function reported an unauthenticated user. This could be due to a session issue or if anonymous sign-in failed silently. Ensure you are signed in (even anonymously).";
         } else if (httpsError.code === 'unavailable') {
-           finalErrorMessage += " The function might be deploying or temporarily unavailable. Check emulator status or Firebase Console for deployed functions.";
+           finalErrorMessage += " The function might be deploying or temporarily unavailable. Check emulator status or Firebase Console.";
         } else if (httpsError.code === 'internal') {
            finalErrorMessage += " The function encountered an internal error. Check function logs in the emulator or Firebase Console.";
         } else if (httpsError.code === 'invalid-argument') {
-            finalErrorMessage += " The function reported invalid arguments. Check the data sent. " + (httpsError.details ? JSON.stringify(httpsError.details) : '');
+            finalErrorMessage += " The function reported invalid arguments. Sent: audioFileName='" + selectedVoiceSample.name + "', imageId='" + (selectedImage.name || "uploaded_image") + "'. Details: " + (httpsError.details ? JSON.stringify(httpsError.details) : 'N/A');
         }
       } else if (error.message) { 
-        finalErrorMessage = `Client-side error before/during function call: ${error.message}`;
+        finalErrorMessage = `Client-side error calling function: ${error.message}`;
       }
       
       setFirebaseVideoError(finalErrorMessage);
@@ -1212,19 +1215,19 @@ export default function Home() {
             <div className="space-y-4">
               <div>
                 <Label htmlFor="firebase-video-info" className="text-base">Image &amp; Audio Source for Backend Video:</Label>
-                {imagePreview && preparedSpeechTextRef.current ? (
+                {(imagePreview && selectedVoiceSample) ? (
                   <p className="text-sm text-muted-foreground mt-1" id="firebase-video-info">
-                    Uses your uploaded image and the text from "Process Input for Speech" to request a mock video from the Firebase Callable Function. If you are not signed in, an anonymous sign-in will be attempted.
+                    Uses your uploaded image and the voice sample from the "Voice Cloning" section to request a mock video from the Firebase Callable Function. If you are not signed in, an anonymous sign-in will be attempted.
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground mt-1" id="firebase-video-info">
-                    Please upload an image and use "Process Input for Speech" first.
+                    Please upload an image (first section) AND a voice sample (second section).
                   </p>
                 )}
               </div>
               <Button
                 onClick={handleGenerateFirebaseLipSyncVideo}
-                disabled={anyLoading || !imagePreview || !preparedSpeechTextRef.current}
+                disabled={anyLoading || !imagePreview || !selectedVoiceSample}
                 className="w-full sm:w-auto"
               >
                 {isGeneratingFirebaseVideo ? (
@@ -1256,7 +1259,7 @@ export default function Home() {
                     Your browser does not support the video tag.
                   </video>
                   <p className="text-xs text-muted-foreground italic">
-                    This video is a mock response from an authenticated Firebase Callable Function simulating a backend lip-sync process.
+                    This video is a mock response from an authenticated Firebase Callable Function simulating a backend lip-sync process using the uploaded image and voice sample name.
                   </p>
                 </div>
               )}
@@ -1428,3 +1431,4 @@ export default function Home() {
     </div>
   );
 }
+

@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Sparkles } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Sparkles, Video, Film } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame, type GenerateAnimatedFrameOutput } from '@/ai/flows/generate-animated-frame-flow';
 
@@ -40,6 +40,11 @@ export default function Home() {
   const [isAnimatedOutputSpeaking, setIsAnimatedOutputSpeaking] = useState<boolean>(false);
   const [isAnimatedOutputAnimating, setIsAnimatedOutputAnimating] = useState<boolean>(false);
   const [displayedFrameInAnimatedOutput, setDisplayedFrameInAnimatedOutput] = useState<string | null>(null);
+
+  // States for Firebase Lip-Sync Video section
+  const [isGeneratingFirebaseVideo, setIsGeneratingFirebaseVideo] = useState<boolean>(false);
+  const [firebaseVideoUrl, setFirebaseVideoUrl] = useState<string | null>(null);
+  const [firebaseVideoError, setFirebaseVideoError] = useState<string | null>(null);
   
   const { toast } = useToast();
 
@@ -75,6 +80,8 @@ export default function Home() {
         }
         setIsAnimatedOutputAnimating(false);
       }
+      setFirebaseVideoUrl(null);
+      setFirebaseVideoError(null);
     }
   }, [imagePreview]); 
 
@@ -140,6 +147,9 @@ export default function Home() {
       animatedOutputFlickerIntervalRef.current = null;
     }
     setIsAnimatedOutputAnimating(false);
+
+    setFirebaseVideoUrl(null);
+    setFirebaseVideoError(null);
   }, []);
 
 
@@ -203,6 +213,8 @@ export default function Home() {
     setIsGeneratingSpeech(true);
     setPreparedSpeechText(null); 
     setTextForSimulatedClonedVoice(null); 
+    setFirebaseVideoUrl(null);
+    setFirebaseVideoError(null);
 
 
     let imageDataUri: string | undefined = undefined;
@@ -362,6 +374,8 @@ export default function Home() {
     else setSelectedVoiceSample(null);
     
     setTextForSimulatedClonedVoice(null);
+    setFirebaseVideoUrl(null);
+    setFirebaseVideoError(null);
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current || isAnimatedOutputSpeakingRef.current)) {
         window.speechSynthesis.cancel();
@@ -501,6 +515,7 @@ export default function Home() {
 
   
   const getTextForAnimatedOutput = () => {
+    // Prioritize preparedSpeechText for this section
     if (preparedSpeechTextRef.current &&
         preparedSpeechTextRef.current.trim() !== "" &&
         !preparedSpeechTextRef.current.toLowerCase().startsWith("no text was provided") &&
@@ -583,9 +598,11 @@ export default function Home() {
         } else {
             let userFriendlyAiMessage = "The AI couldn't create an image for this request. This can happen sometimes. You could try again, perhaps with different text or a slightly different image.";
             if (aiFrameResult.errorMessage) {
-                userFriendlyAiMessage = aiFrameResult.errorMessage.includes("AI model processed the request but did not return an image") 
-                    ? "The AI model processed the request but did not return an image. You can try again." 
-                    : aiFrameResult.errorMessage;
+              if (aiFrameResult.errorMessage.includes("AI model processed the request but did not return an image")) {
+                 userFriendlyAiMessage = "The AI model processed the request but did not return an image. You can try again.";
+              } else {
+                 userFriendlyAiMessage = aiFrameResult.errorMessage;
+              }
             }
             console.warn('[GenerateAnimatedOutput] AI Frame Gen Issue:', aiFrameResult.errorMessage || 'AI model did not return an image.', 'Type:', aiFrameResult.errorType);
             setAnimatedOutputError(userFriendlyAiMessage);
@@ -611,7 +628,7 @@ export default function Home() {
 
         setTimeout(() => {
           if (animatedOutputSpeakingTextContentRef.current !== textToSpeak || !isGeneratingAnimatedOutputRef.current) {
-            setIsGeneratingAnimatedOutput(false);
+            if (isGeneratingAnimatedOutputRef.current) setIsGeneratingAnimatedOutput(false);
             return;
           }
 
@@ -624,7 +641,7 @@ export default function Home() {
           };
           utterance.onend = () => {
             setIsAnimatedOutputSpeaking(false);
-            // stopAnimatedOutputFlicker(); // Keep animation going as per previous request
+            // stopAnimatedOutputFlicker(); // Keep animation going
             setIsGeneratingAnimatedOutput(false); 
           };
           utterance.onerror = (event) => {
@@ -664,10 +681,63 @@ export default function Home() {
     }
     setIsAnimatedOutputSpeaking(false); 
     stopAnimatedOutputFlicker();
+    // If generation was ongoing, mark it as complete.
+    if (isGeneratingAnimatedOutputRef.current) setIsGeneratingAnimatedOutput(false);
+  };
+
+  const handleGenerateFirebaseLipSyncVideo = async () => {
+    const textToSpeak = preparedSpeechTextRef.current;
+
+    if (!selectedImage || !imagePreviewRef.current) {
+      toast({ title: "Image Required", description: "Please upload an image.", variant: "destructive" });
+      return;
+    }
+    if (!textToSpeak) {
+      toast({ title: "Prepared Text Required", description: "Please process text for speech first.", variant: "destructive" });
+      return;
+    }
+
+    setIsGeneratingFirebaseVideo(true);
+    setFirebaseVideoUrl(null);
+    setFirebaseVideoError(null);
+    toast({ title: "Calling Backend...", description: "Requesting mock lip-sync video from Firebase Function..." });
+
+    try {
+      const response = await fetch('/api/firebase-lip-sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          textToSpeak: textToSpeak,
+          // Sending a simple ID, actual image data not used by this mock backend
+          imageId: selectedImage.name || "uploaded_image" 
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Failed to parse error response from backend proxy." }));
+        throw new Error(errorData.message || `Network response was not ok (status: ${response.status})`);
+      }
+
+      const result = await response.json();
+      if (result.mockVideoUrl) {
+        setFirebaseVideoUrl(result.mockVideoUrl);
+        toast({ title: "Backend Call Successful", description: "Mock video URL received.", duration: 5000 });
+      } else {
+        throw new Error(result.message || "Backend did not return a video URL.");
+      }
+    } catch (error: any) {
+      console.error("Error calling Firebase lip-sync API:", error);
+      setFirebaseVideoError(error.message || "An unexpected error occurred calling the backend.");
+      toast({ title: "Backend Call Error", description: error.message || "Failed to get mock video from backend.", variant: "destructive" });
+    } finally {
+      setIsGeneratingFirebaseVideo(false);
+    }
   };
   
   
-  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingAnimatedOutput;
+  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingAnimatedOutput || isGeneratingFirebaseVideo;
   const currentPreparedTextIsSpeaking = isSpeaking && preparedSpeechText && speakingText === preparedSpeechText;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoiceRef.current && textForSimulatedClonedVoiceRef.current === textForSimulatedClonedVoiceRef.current;
 
@@ -825,7 +895,7 @@ export default function Home() {
 
               <Button
                 onClick={isAnimatedOutputSpeaking || isAnimatedOutputAnimating ? handleStopAnimatedOutput : handleGenerateAnimatedOutputAndSpeak}
-                disabled={(isGeneratingAnimatedOutput && !(isAnimatedOutputSpeaking || isAnimatedOutputAnimating)) || !imagePreview || !getTextForAnimatedOutput()}
+                disabled={(isGeneratingAnimatedOutput && !(isAnimatedOutputSpeaking || isAnimatedOutputAnimating)) || !imagePreview || !getTextForAnimatedOutput() || isGeneratingFirebaseVideo}
                 className="w-full sm:w-auto"
               >
                 {isGeneratingAnimatedOutput && !(isAnimatedOutputSpeaking || isAnimatedOutputAnimating) ? (
@@ -890,6 +960,68 @@ export default function Home() {
               </div>
             </div>
           </SectionCard>
+
+          <SectionCard title="Lip-Sync Video Generation (Mock Backend Call)" icon={<Video className="text-primary" />}>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="firebase-video-info" className="text-base">Image &amp; Audio Source for Backend Video:</Label>
+                {imagePreview && preparedSpeechText ? (
+                  <p className="text-sm text-muted-foreground mt-1" id="firebase-video-info">
+                    Uses your uploaded image and the text from "Process Input for Speech" to request a mock video from the backend (Firebase Function).
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground mt-1" id="firebase-video-info">
+                    Please upload an image and use "Process Input for Speech" first.
+                  </p>
+                )}
+              </div>
+              <Button
+                onClick={handleGenerateFirebaseLipSyncVideo}
+                disabled={anyLoading || !imagePreview || !preparedSpeechText}
+                className="w-full sm:w-auto"
+              >
+                {isGeneratingFirebaseVideo ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Requesting from Backend...</>
+                ) : (
+                  <><Film className="mr-2 h-4 w-4" />Generate Mock Lip-Sync Video (Backend)</>
+                )}
+              </Button>
+
+              {firebaseVideoUrl && (
+                <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow space-y-2">
+                  <Label className="text-lg font-semibold text-foreground">Mock Video from Backend:</Label>
+                  <video
+                    key={firebaseVideoUrl}
+                    src={firebaseVideoUrl}
+                    controls
+                    autoPlay
+                    className="w-full rounded-md aspect-video bg-black"
+                    onError={(e) => {
+                      const videoElement = e.target as HTMLVideoElement;
+                      let errorMsg = "Error playing video.";
+                      if (videoElement.error) {
+                         errorMsg = `Video error: ${videoElement.error.message} (code: ${videoElement.error.code})`;
+                      }
+                      setFirebaseVideoError(errorMsg);
+                      toast({ title: "Video Playback Error", description: errorMsg, variant: "destructive" });
+                    }}
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                  <p className="text-xs text-muted-foreground italic">
+                    This video is a mock response from a Firebase Function simulating a backend lip-sync process.
+                  </p>
+                </div>
+              )}
+              {firebaseVideoError && (
+                <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  <p>Backend Video Error: {firebaseVideoError}</p>
+                </div>
+              )}
+            </div>
+          </SectionCard>
+
         </div>
       </main>
       <footer className="py-6 text-center text-muted-foreground border-t">

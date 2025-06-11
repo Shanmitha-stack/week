@@ -22,40 +22,13 @@ exports.prepareLipSyncVideo = functions.region('us-central1').https.onRequest(as
     return;
   }
 
-  if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed. Please use POST.');
-    return;
-  }
-
-  const { textToSpeak, imageId } = req.body;
-
-  if (!textToSpeak || !imageId) {
-    res.status(400).send('Bad Request: Missing textToSpeak or imageId in JSON request body.');
-    return;
-  }
-
-  functions.logger.info("Received request for prepareLipSyncVideo:", {
-    textToSpeak: typeof textToSpeak === 'string' ? textToSpeak.substring(0, 100) : '[Invalid textToSpeak format]', // Log first 100 chars
-    imageId: imageId,
-    timestamp: new Date().toISOString(),
-  });
-
-  // Simulate processing delay (e.g., AI model processing)
-  await new Promise(resolve => setTimeout(resolve, 2500)); // 2.5 seconds delay
-
-  // In a real scenario, you would generate a video and get its URL.
-  // For this mock, we'll use a placeholder video URL.
-  const mockVideoUrl = `https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4?mock_id=${Date.now()}&text=${encodeURIComponent(typeof textToSpeak === 'string' ? textToSpeak.substring(0,20) : 'default')}`;
-
-  functions.logger.info("Mock processing complete for prepareLipSyncVideo. Returning mock video URL.");
-
-  res.status(200).json({
-    message: "Lip-sync video preparation (mock) initiated successfully.",
-    textReceived: textToSpeak,
-    imageIdReceived: imageId,
-    mockVideoUrl: mockVideoUrl,
-    processedAt: new Date().toISOString(),
-  });
+  // Your backend logic here (simplified as per user request)
+  // The original mock logic (validation, delay, detailed response) is replaced.
+  functions.logger.info("Received request for prepareLipSyncVideo (simplified version). Request body (first 100 chars):", 
+    req.body ? JSON.stringify(req.body).substring(0,100) : "No body"
+  );
+  
+  res.status(200).json({ message: 'Function received the request successfully!' });
 });
 
 // You can add more Firebase Functions exports here as needed.
@@ -75,7 +48,8 @@ exports.getAppInfo = functions.region('us-central1').https.onRequest((req, res) 
     appName: "Avatar Animation App - Firebase Backend",
     version: "1.0.0",
     description: "This is the backend for the Avatar Animation application.",
-    features: ["mockLipSyncVideoPreparation"],
+    features: ["mockLipSyncVideoPreparation", "getAppInfo"],
     timestamp: new Date().toISOString(),
   });
 });
+

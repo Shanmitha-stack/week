@@ -10,9 +10,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Sparkles, Video, Film } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Sparkles, Video, Film, UploadCloud } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame, type GenerateAnimatedFrameOutput } from '@/ai/flows/generate-animated-frame-flow';
+
+import { storage } from '@/lib/firebase'; // Firebase Storage
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 
 export default function Home() {
@@ -46,6 +49,13 @@ export default function Home() {
   const [isGeneratingFirebaseVideo, setIsGeneratingFirebaseVideo] = useState<boolean>(false);
   const [firebaseVideoUrl, setFirebaseVideoUrl] = useState<string | null>(null);
   const [firebaseVideoError, setFirebaseVideoError] = useState<string | null>(null);
+
+  // States for Firebase Storage Upload section
+  const [storageImageFile, setStorageImageFile] = useState<File | null>(null);
+  const [storageAudioFile, setStorageAudioFile] = useState<File | null>(null);
+  const [isUploadingToStorage, setIsUploadingToStorage] = useState<boolean>(false);
+  const [uploadStatusMessage, setUploadStatusMessage] = useState<string | null>(null);
+  const [uploadedFileUrls, setUploadedFileUrls] = useState<{ image?: string; audio?: string } | null>(null);
   
   const { toast } = useToast();
 
@@ -68,7 +78,6 @@ export default function Home() {
   useEffect(() => {
     imagePreviewRef.current = imagePreview;
     if (!imagePreview) { 
-      // Reset AI Animated Output section
       setAnimatedOutputAiFrame(null);
       setAnimatedOutputError(null);
       setDisplayedFrameInAnimatedOutput(null);
@@ -83,11 +92,9 @@ export default function Home() {
         }
         setIsAnimatedOutputAnimating(false);
       }
-      // Reset Firebase video section
       setFirebaseVideoUrl(null);
       setFirebaseVideoError(null);
     } else {
-      // If there's a new image, update the base display for animated output if it's not actively animating/generating
       if (!isAnimatedOutputAnimatingRef.current && !isGeneratingAnimatedOutputRef.current) {
         setDisplayedFrameInAnimatedOutput(imagePreview);
       }
@@ -126,7 +133,6 @@ export default function Home() {
       setSpeakingText(null);
       setIsSimulatedClonedVoiceSpeaking(false);
       
-      // Cleanup for AI Animated Output section
       setIsAnimatedOutputSpeaking(false);
       if (animatedOutputFlickerIntervalRef.current) {
         clearInterval(animatedOutputFlickerIntervalRef.current);
@@ -140,11 +146,8 @@ export default function Home() {
     setPreparedSpeechText(null);
     setTextForSimulatedClonedVoice(null); 
     
-    // Reset AI Animated Output section
     setAnimatedOutputAiFrame(null);
     setAnimatedOutputError(null);
-    // Only reset displayed frame if not currently animating or generating an image.
-    // If an image is selected, it should default to that.
     if (!isAnimatedOutputAnimatingRef.current && !isGeneratingAnimatedOutputRef.current) {
       setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); 
     }
@@ -165,7 +168,6 @@ export default function Home() {
     }
     setIsAnimatedOutputAnimating(false);
 
-    // Reset Firebase video section
     setFirebaseVideoUrl(null);
     setFirebaseVideoError(null);
   }, []);
@@ -179,7 +181,6 @@ export default function Home() {
       reader.onloadend = () => {
         const result = reader.result as string;
         setImagePreview(result);
-        // Set initial display for animated output section
         if (!isAnimatedOutputAnimatingRef.current && !isGeneratingAnimatedOutputRef.current) {
           setDisplayedFrameInAnimatedOutput(result); 
         }
@@ -220,7 +221,6 @@ export default function Home() {
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false); 
     
-    // Stop AI Animated Output section if it's active
     if (isAnimatedOutputSpeakingRef.current || isAnimatedOutputAnimatingRef.current) {
       handleStopAnimatedOutput();
     }
@@ -341,7 +341,7 @@ export default function Home() {
       setIsSpeaking(true); 
       setSpeakingText(textToSpeak); 
       setIsSimulatedClonedVoiceSpeaking(false); 
-      if (isAnimatedOutputSpeakingRef.current) { // Stop animated output if it's speaking
+      if (isAnimatedOutputSpeakingRef.current) {
         handleStopAnimatedOutput();
       }
 
@@ -497,7 +497,7 @@ export default function Home() {
     setIsSimulatedClonedVoiceSpeaking(true); 
     setIsSpeaking(false); 
     setSpeakingText(null);
-    if (isAnimatedOutputSpeakingRef.current || isAnimatedOutputAnimatingRef.current) { // Stop animated output if it's active
+    if (isAnimatedOutputSpeakingRef.current || isAnimatedOutputAnimatingRef.current) {
         handleStopAnimatedOutput();
     }
     
@@ -537,9 +537,7 @@ export default function Home() {
   }, [isSpeechSupported, toast]);
 
   
-  // Specifically for "AI Animated Output & Speech" section
   const getTextForAnimatedOutput = () => {
-    // Prioritize preparedSpeechText for this section
     if (preparedSpeechTextRef.current &&
         preparedSpeechTextRef.current.trim() !== "" &&
         !preparedSpeechTextRef.current.toLowerCase().startsWith("no text was provided") &&
@@ -555,24 +553,22 @@ export default function Home() {
       animatedOutputFlickerIntervalRef.current = null;
     }
     setIsAnimatedOutputAnimating(false);
-    // Ensure the display reverts to the original image or the single AI frame if available
     setDisplayedFrameInAnimatedOutput(animatedOutputAiFrameRef.current || imagePreviewRef.current); 
   }, []);
 
   const startAnimatedOutputFlicker = useCallback(() => {
     if (!imagePreviewRef.current || !animatedOutputAiFrameRef.current) {
-      stopAnimatedOutputFlicker(); // Stop if essential frames are missing
+      stopAnimatedOutputFlicker(); 
       return;
     }
-    stopAnimatedOutputFlicker(); // Clear any existing interval
+    stopAnimatedOutputFlicker(); 
     setIsAnimatedOutputAnimating(true);
-    // Start by showing the AI frame
     setDisplayedFrameInAnimatedOutput(animatedOutputAiFrameRef.current);
     animatedOutputFlickerIntervalRef.current = setInterval(() => {
       setDisplayedFrameInAnimatedOutput(prev => 
         prev === imagePreviewRef.current ? animatedOutputAiFrameRef.current : imagePreviewRef.current
       );
-    }, 250); // Flicker speed
+    }, 250); 
   }, [stopAnimatedOutputFlicker]);
 
 
@@ -591,9 +587,8 @@ export default function Home() {
     setIsGeneratingAnimatedOutput(true);
     setAnimatedOutputAiFrame(null);
     setAnimatedOutputError(null);
-    animatedOutputSpeakingTextContentRef.current = textToSpeak; // Store the text that will be spoken
+    animatedOutputSpeakingTextContentRef.current = textToSpeak; 
     
-    // Cancel any other ongoing speech
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
           window.speechSynthesis.cancel();
@@ -602,19 +597,17 @@ export default function Home() {
     setIsSpeaking(false); 
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false); 
-    // Reset own states before starting
     setIsAnimatedOutputSpeaking(false);
     stopAnimatedOutputFlicker();
-    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Show original image initially
+    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); 
 
     toast({ title: "Generating Output...", description: "AI is creating an expressive frame and preparing speech..." });
   
     let aiFrameResult: GenerateAnimatedFrameOutput | null = null;
 
     try {
-      // Step 1: Generate AI expressive frame
       try {
-        const textSnippet = textToSpeak.substring(0, 150); // Use a snippet for the prompt
+        const textSnippet = textToSpeak.substring(0, 150); 
         const animationPrompt = `Your primary task is to transform the provided static photo into a single, highly expressive keyframe image. This new image must depict the person as if they are frozen mid-sentence, actively speaking the initial words of this text: "${textSnippet}". CRITICALLY, the generated image needs to show *clear visual changes* from the original photo, especially in the mouth shape (viseme) to precisely match the first phonemes of the text, and in the eye expression to convey engagement in speech. The overall facial expression should be dynamic and appropriate for the act of speaking these initial words. The output MUST be the generated image.`;
         
         aiFrameResult = await generateAnimatedFrame({
@@ -624,7 +617,6 @@ export default function Home() {
     
         if (aiFrameResult.generatedFrameDataUri) {
           setAnimatedOutputAiFrame(aiFrameResult.generatedFrameDataUri);
-          // Don't set displayedFrameInAnimatedOutput here yet, wait for speech start
         } else {
             let userFriendlyAiMessage = "The AI couldn't create an image for this request. This can happen sometimes. You could try again, perhaps with different text or a slightly different image.";
             if (aiFrameResult.errorMessage) {
@@ -639,7 +631,7 @@ export default function Home() {
             console.warn('[GenerateAnimatedOutput] AI Frame Gen Issue:', aiFrameResult.errorMessage || 'AI model did not return an image.', 'Type:', aiFrameResult.errorType);
             setAnimatedOutputError(userFriendlyAiMessage);
             toast({ title: "AI Image Not Generated", description: userFriendlyAiMessage, variant: aiFrameResult.errorType === 'AI_API_ERROR' ? "destructive" : "default", duration: 7000 });
-            setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Show original if AI frame fails
+            setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); 
         }
       } catch (frameError: any) {
         console.error('[GenerateAnimatedOutput] Error during AI frame generation call:', frameError);
@@ -648,42 +640,34 @@ export default function Home() {
         toast({ title: "AI Frame Error", description: message, variant: "destructive" });
         setIsGeneratingAnimatedOutput(false);
         setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); 
-        return; // Critical failure, stop here
+        return; 
       }
 
-      // Step 2: Prepare and play speech
       if (isSpeechSupported && textToSpeak) {
         if (aiFrameResult?.generatedFrameDataUri) {
              toast({ title: "AI Frame Ready!", description: "Speaking the text with animation...", duration: 4000 });
         } else {
-             // Still proceed with speech even if AI frame failed, using original image
              toast({ title: "AI Frame Failed", description: "Speaking the text with original image...", duration: 5000 });
         }
 
-        // Small delay to allow state updates from AI frame generation to settle if needed
         setTimeout(() => {
-          // Check if the process was cancelled or the text changed
           if (animatedOutputSpeakingTextContentRef.current !== textToSpeak || !isGeneratingAnimatedOutputRef.current) {
-            if (isGeneratingAnimatedOutputRef.current) setIsGeneratingAnimatedOutput(false); // Mark as not generating if we bail here
+            if (isGeneratingAnimatedOutputRef.current) setIsGeneratingAnimatedOutput(false); 
             return;
           }
 
           const utterance = new SpeechSynthesisUtterance(textToSpeak);
           utterance.onstart = () => {
             setIsAnimatedOutputSpeaking(true);
-            // Start flicker animation only if AI frame was successful
             if (animatedOutputAiFrameRef.current && imagePreviewRef.current) { 
               startAnimatedOutputFlicker();
             } else {
-              // If no AI frame, just show the original image
               setDisplayedFrameInAnimatedOutput(imagePreviewRef.current);
             }
           };
           utterance.onend = () => {
             setIsAnimatedOutputSpeaking(false);
-            // Flicker animation continues by default after speech ends
-            // stopAnimatedOutputFlicker(); 
-            setIsGeneratingAnimatedOutput(false); // Generation phase is complete
+            setIsGeneratingAnimatedOutput(false); 
           };
           utterance.onerror = (event) => {
             let toastMessage = `Could not play animated output speech. (Error: ${event.error || 'unknown'})`;
@@ -698,39 +682,34 @@ export default function Home() {
             setIsAnimatedOutputSpeaking(false);
             stopAnimatedOutputFlicker();
             setIsGeneratingAnimatedOutput(false);
-            setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Revert to original on error
+            setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); 
           };
           window.speechSynthesis.speak(utterance);
         }, 100);
       } else {
-        // If no speech, generation phase ends after AI frame attempt
         toast({ title: "Speech Not Available", description: "Browser speech not supported or no text for animation.", duration: 5000 });
         setIsGeneratingAnimatedOutput(false); 
-        // Display the AI frame if successful, or original if not
         setDisplayedFrameInAnimatedOutput(animatedOutputAiFrameRef.current || imagePreviewRef.current);
       }
 
-    } catch (error: any) { // Catch any other unexpected errors in this flow
+    } catch (error: any) { 
       console.error('[GenerateAnimatedOutput] General client-side processing error:', error);
       const message = error.message || "An unexpected client-side error occurred.";
       setAnimatedOutputError(message);
       toast({ title: "Client Error", description: message, variant: "destructive" });
       setIsGeneratingAnimatedOutput(false);
-      setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Revert to original on error
+      setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); 
     } 
-    // Note: isGeneratingAnimatedOutput is set to false inside speech onend/onerror or if speech is not supported.
-    // If speech is supported, it remains true until speech handling completes or errors out.
   };
 
   const handleStopAnimatedOutput = () => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel(); // Stop any ongoing speech for this section
+      window.speechSynthesis.cancel(); 
     }
     setIsAnimatedOutputSpeaking(false); 
     stopAnimatedOutputFlicker();
-    // If generation was ongoing, mark it as complete (stopped by user).
     if (isGeneratingAnimatedOutputRef.current) setIsGeneratingAnimatedOutput(false);
-    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current || animatedOutputAiFrameRef.current); // Show a static frame
+    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current || animatedOutputAiFrameRef.current); 
   };
 
 
@@ -786,8 +765,80 @@ export default function Home() {
     }
   };
   
+  const handleStorageImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) setStorageImageFile(file);
+    else setStorageImageFile(null);
+    setUploadStatusMessage(null);
+    setUploadedFileUrls(null);
+  };
+
+  const handleStorageAudioFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) setStorageAudioFile(file);
+    else setStorageAudioFile(null);
+    setUploadStatusMessage(null);
+    setUploadedFileUrls(null);
+  };
+
+  const handleUploadFilesToStorage = async () => {
+    if (!storageImageFile && !storageAudioFile) {
+      toast({ title: "No Files Selected", description: "Please select an image and/or an audio file to upload.", variant: "destructive" });
+      return;
+    }
+    if (!process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET) {
+        toast({ title: "Configuration Error", description: "Firebase Storage bucket is not configured. Please check your .env file.", variant: "destructive" });
+        return;
+    }
+
+
+    setIsUploadingToStorage(true);
+    setUploadStatusMessage("Starting upload...");
+    setUploadedFileUrls(null);
+    toast({ title: "Uploading Files...", description: "Please wait." });
+
+    let imageDownloadUrl: string | undefined = undefined;
+    let audioDownloadUrl: string | undefined = undefined;
+
+    try {
+      if (storageImageFile) {
+        setUploadStatusMessage(`Uploading image: ${storageImageFile.name}...`);
+        const imageFilePath = `uploads/images/${Date.now()}_${storageImageFile.name}`;
+        const imageFileRef = storageRef(storage, imageFilePath);
+        await uploadBytes(imageFileRef, storageImageFile);
+        imageDownloadUrl = await getDownloadURL(imageFileRef);
+        toast({ title: "Image Uploaded", description: `Successfully uploaded ${storageImageFile.name}.` });
+        setUploadStatusMessage(`Image ${storageImageFile.name} uploaded.`);
+      }
+
+      if (storageAudioFile) {
+        setUploadStatusMessage(`Uploading audio: ${storageAudioFile.name}...`);
+        const audioFilePath = `uploads/audio/${Date.now()}_${storageAudioFile.name}`;
+        const audioFileRef = storageRef(storage, audioFilePath);
+        await uploadBytes(audioFileRef, storageAudioFile);
+        audioDownloadUrl = await getDownloadURL(audioFileRef);
+        toast({ title: "Audio Uploaded", description: `Successfully uploaded ${storageAudioFile.name}.` });
+         setUploadStatusMessage(imageDownloadUrl ? `Image and audio ${storageAudioFile.name} uploaded.` : `Audio ${storageAudioFile.name} uploaded.`);
+      }
+      
+      setUploadedFileUrls({ image: imageDownloadUrl, audio: audioDownloadUrl });
+      if (imageDownloadUrl || audioDownloadUrl) {
+        setUploadStatusMessage("All selected files uploaded successfully!");
+      } else {
+        setUploadStatusMessage("No files were selected for upload.");
+      }
+
+    } catch (error: any) {
+      console.error("Error uploading to Firebase Storage:", error);
+      const errorMessage = error.message || "An unexpected error occurred during upload.";
+      setUploadStatusMessage(`Upload failed: ${errorMessage}`);
+      toast({ title: "Upload Error", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsUploadingToStorage(false);
+    }
+  };
   
-  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingAnimatedOutput || isGeneratingFirebaseVideo;
+  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingAnimatedOutput || isGeneratingFirebaseVideo || isUploadingToStorage;
   const currentPreparedTextIsSpeaking = isSpeaking && preparedSpeechText && speakingText === preparedSpeechText;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoiceRef.current && textForSimulatedClonedVoiceRef.current === textForSimulatedClonedVoiceRef.current;
 
@@ -977,7 +1028,7 @@ export default function Home() {
                             priority={true} 
                             data-ai-hint="animated expressive speaking frame"
                         />
-                    ) : imagePreviewRef.current ? ( // Fallback to original image if displayedFrame is null but preview exists
+                    ) : imagePreviewRef.current ? ( 
                          <Image
                             src={imagePreviewRef.current}
                             alt="Original uploaded image (AI frame pending or issue)"
@@ -986,7 +1037,7 @@ export default function Home() {
                             className="rounded-md bg-black"
                             data-ai-hint="original image"
                         />
-                    ) : ( // Placeholder if no image at all
+                    ) : ( 
                         <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-4">
                         <ImagePlus className="h-12 w-12 mb-4 text-muted-foreground/50" data-ai-hint="image placeholder" />
                         <p className="text-lg font-semibold">Animated output will appear here</p>
@@ -1077,6 +1128,90 @@ export default function Home() {
             </div>
           </SectionCard>
 
+          <SectionCard title="File Upload to Firebase Storage" icon={<UploadCloud className="text-primary" />}>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="storage-image-input" className="text-base flex items-center gap-2">
+                  <ImagePlus className="h-5 w-5 text-muted-foreground" />
+                  Select Image File:
+                </Label>
+                <Input
+                  id="storage-image-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleStorageImageFileChange}
+                  className="text-base mt-1 file:text-primary file:font-medium"
+                  disabled={anyLoading}
+                />
+                {storageImageFile && <p className="text-sm text-muted-foreground mt-1">Selected: {storageImageFile.name}</p>}
+              </div>
+
+              <div>
+                <Label htmlFor="storage-audio-input" className="text-base flex items-center gap-2">
+                  <MicVocal className="h-5 w-5 text-muted-foreground" />
+                  Select Audio File:
+                </Label>
+                <Input
+                  id="storage-audio-input"
+                  type="file"
+                  accept="audio/*"
+                  onChange={handleStorageAudioFileChange}
+                  className="text-base mt-1 file:text-primary file:font-medium"
+                  disabled={anyLoading}
+                />
+                {storageAudioFile && <p className="text-sm text-muted-foreground mt-1">Selected: {storageAudioFile.name}</p>}
+              </div>
+
+              <Button
+                onClick={handleUploadFilesToStorage}
+                disabled={anyLoading || (!storageImageFile && !storageAudioFile)}
+                className="w-full sm:w-auto"
+              >
+                {isUploadingToStorage ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading...</>
+                ) : (
+                  <><UploadCloud className="mr-2 h-4 w-4" />Upload Files to Storage</>
+                )}
+              </Button>
+
+              {uploadStatusMessage && (
+                <p className={`mt-2 text-sm ${uploadedFileUrls ? 'text-green-600' : 'text-destructive'}`}>
+                  {uploadStatusMessage}
+                </p>
+              )}
+
+              {uploadedFileUrls && (
+                <div className="mt-4 space-y-2 p-3 border rounded-md bg-muted/20">
+                  <Label className="text-base font-semibold">Uploaded File URLs:</Label>
+                  {uploadedFileUrls.image && (
+                    <div>
+                      <p className="text-sm font-medium">Image:</p>
+                      <a href={uploadedFileUrls.image} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline break-all">
+                        {uploadedFileUrls.image}
+                      </a>
+                    </div>
+                  )}
+                  {uploadedFileUrls.audio && (
+                    <div>
+                      <p className="text-sm font-medium">Audio:</p>
+                      <a href={uploadedFileUrls.audio} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline break-all">
+                        {uploadedFileUrls.audio}
+                      </a>
+                    </div>
+                  )}
+                   <p className="text-xs text-muted-foreground mt-2 italic">
+                    These files are now in Firebase Storage. Uploading to specific paths can be configured to trigger Firebase Functions for further processing (e.g., lip-sync).
+                  </p>
+                </div>
+              )}
+               <p className="text-xs text-muted-foreground mt-1 italic">
+                This section demonstrates uploading files. Ensure your Firebase Storage is set up and security rules allow uploads from your app.
+                You'll also need to populate your <code>.env</code> file with Firebase client configuration values.
+              </p>
+            </div>
+          </SectionCard>
+
+
         </div>
       </main>
       <footer className="py-6 text-center text-muted-foreground border-t">
@@ -1085,3 +1220,4 @@ export default function Home() {
     </div>
   );
 }
+

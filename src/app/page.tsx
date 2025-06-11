@@ -123,19 +123,31 @@ export default function Home() {
       setIsSpeechSupported(false);
     }
     
-    // Connect to Firebase Functions emulator if URL is provided
     const functionsEmulatorUrl = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL;
     if (functionsEmulatorUrl && firebaseFunctions) {
       try {
-        const url = new URL(functionsEmulatorUrl);
-        const port = url.port ? parseInt(url.port, 10) : (url.protocol === 'https:' ? 443 : 80);
-        console.log(`Attempting to connect Firebase Functions emulator to host: ${url.hostname}, port: ${port}`);
-        fbConnectFunctionsEmulator(firebaseFunctions, url.hostname, port);
-        // Consider a subtle toast or log if successful connection is important for user feedback
-        // toast({ title: "Emulator Info", description: `Functions emulator connected to ${url.hostname}:${port}`, duration: 3000 });
-      } catch (e) {
-        console.error("Invalid NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL for emulator connection:", functionsEmulatorUrl, e);
-        toast({ title: "Emulator Config Error", description: "Could not connect to Firebase Functions emulator: Invalid URL format.", variant: "destructive", duration: 7000 });
+        // connectFunctionsEmulator expects host and port.
+        // Example NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL: http://127.0.0.1:5001 or https://my-workstation-host.com
+        // It should NOT include project ID or function name.
+        const url = new URL(functionsEmulatorUrl.startsWith('http') ? functionsEmulatorUrl : `http://${functionsEmulatorUrl}`);
+        const host = url.hostname;
+        const port = parseInt(url.port, 10);
+
+        if (!host || isNaN(port)) {
+          throw new Error('Invalid host or port derived from emulator URL.');
+        }
+        
+        console.log(`Attempting to connect Firebase Functions emulator to host: ${host}, port: ${port}`);
+        fbConnectFunctionsEmulator(firebaseFunctions, host, port);
+        // toast({ title: "Emulator Info", description: `Firebase Functions emulator attempting connection to ${host}:${port}`, duration: 4000 });
+      } catch (e: any) {
+        console.error("Error parsing or connecting to Firebase Functions emulator URL:", functionsEmulatorUrl, e);
+        toast({ 
+          title: "Emulator Config Error", 
+          description: `Could not connect to Firebase Functions emulator. Check URL format: '${functionsEmulatorUrl}'. Error: ${e.message}`, 
+          variant: "destructive", 
+          duration: 8000 
+        });
       }
     }
 
@@ -322,9 +334,13 @@ export default function Home() {
           duration: 6000,
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       const userMessage = "An AI processing error occurred while preparing your input. This might be due to the AI model having trouble with the provided image (if any) or text. You could try again with a different image, modify the text, or try without an image. If the problem persists, the AI service could be temporarily unavailable.";
-      setPreparedSpeechText("Error: Could not process input for speech. " + ((error as Error).message.includes("AI model processed the request but did not return an image") ? "The AI model had an issue, possibly with the image. Try a different image or no image." : (error as Error).message ));
+      let detailedErrorMessage = (error as Error).message;
+      if (detailedErrorMessage.includes("AI model processed the request but did not return an image")) {
+          detailedErrorMessage = "The AI model had an issue, possibly with the image. Try a different image or no image.";
+      }
+      setPreparedSpeechText("Error: Could not process input for speech. " + detailedErrorMessage);
       console.error("Processing Error in 'handleTextToSpeech' (calling prepareTextForSpeech flow):", error);
       toast({
         title: "AI Processing Error",
@@ -750,51 +766,61 @@ export default function Home() {
       return;
     }
      if (!auth.currentUser) {
-      toast({ title: "Authentication Required", description: "Please sign in to generate a lip-sync video.", variant: "destructive" });
-      setIsGeneratingFirebaseVideo(false); // Ensure loading state is reset
+      toast({ title: "Authentication Required", description: "Please sign in to generate a lip-sync video using the Callable Function.", variant: "destructive" });
       return;
     }
 
     setIsGeneratingFirebaseVideo(true);
     setFirebaseVideoUrl(null);
     setFirebaseVideoError(null);
-    toast({ title: "Calling Backend...", description: "Requesting mock lip-sync video from Firebase Callable Function..." });
+    toast({ title: "Calling Callable Function...", description: "Requesting mock lip-sync video from Firebase..." });
     
     try {
+      console.log("[Callable Call] Invoking 'prepareLipSyncVideo' Firebase Callable Function.");
       const callPrepareLipSyncVideo = httpsCallable(firebaseFunctions, 'prepareLipSyncVideo');
       const result = await callPrepareLipSyncVideo({
         textToSpeak: textToSpeak,
-        imageId: selectedImage.name || "uploaded_image"
+        imageId: selectedImage.name || "uploaded_image" // imageId can be derived from selectedImage
       });
 
-      const data = result.data as { mockVideoUrl?: string; message?: string; dataReceived?: any; error?: string };
+      const data = result.data as { mockVideoUrl?: string; message?: string; dataReceived?: any; error?: string }; // Type assertion for the expected data structure
+      console.log("[Callable Call] Response received from 'prepareLipSyncVideo':", data);
 
       if (data && data.mockVideoUrl) {
         setFirebaseVideoUrl(data.mockVideoUrl);
-        toast({ title: "Backend Call Successful", description: data.message || "Mock video URL received.", duration: 5000 });
-        console.log("Callable function response:", data);
+        toast({ title: "Callable Function Success", description: data.message || "Mock video URL received.", duration: 5000 });
       } else {
-        // This case handles if function executed but didn't return expected data structure
         const noUrlErrorMsg = data?.message || data?.error || "Callable Function did not return a video URL in the expected format.";
-        console.error("[FirebaseLipSync] Callable Function response missing mockVideoUrl:", data);
-        setFirebaseVideoError(noUrlErrorMsg);
-        toast({ title: "Backend Response Error", description: noUrlErrorMsg, variant: "destructive" });
+        console.error("[Callable Call] Callable Function response missing mockVideoUrl or malformed:", data);
+        setFirebaseVideoError(`Callable Function Response Error: ${noUrlErrorMsg}`);
+        toast({ title: "Callable Function Response Error", description: noUrlErrorMsg, variant: "destructive" });
       }
 
     } catch (error: any) {
-      const httpsError = error as HttpsError;
-      console.error("Error calling Firebase Callable Function 'prepareLipSyncVideo':", httpsError);
+      console.error("[Callable Call] Error calling 'prepareLipSyncVideo' Firebase Callable Function:", error);
+      let finalErrorMessage = "An unexpected error occurred when calling the Firebase Function.";
       
-      let finalErrorMessage = `Firebase Function Error: ${httpsError.message || 'An unexpected error occurred.'}`;
-      if (httpsError.code) {
-        finalErrorMessage += ` (Code: ${httpsError.code})`;
-      }
-      if (httpsError.details) {
-        finalErrorMessage += ` Details: ${JSON.stringify(httpsError.details)}`;
+      if (error.code && error.message) { // Check if it's an HttpsError
+        const httpsError = error as HttpsError;
+        finalErrorMessage = `Firebase Function Error: ${httpsError.message} (Code: ${httpsError.code})`;
+        if (httpsError.details) {
+          finalErrorMessage += ` Details: ${JSON.stringify(httpsError.details)}`;
+        }
+         // Specific guidance for common HttpsError codes
+        if (httpsError.code === 'unauthenticated') {
+          finalErrorMessage += " Please ensure you are signed in and your session is valid.";
+        } else if (httpsError.code === 'functions/unavailable' || httpsError.code === 'unavailable') {
+           finalErrorMessage += " The function might be deploying or temporarily unavailable. Check emulator status or Firebase Console for deployed functions.";
+        } else if (httpsError.code === 'functions/internal' || httpsError.code === 'internal') {
+           finalErrorMessage += " The function encountered an internal error. Check function logs in the emulator or Firebase Console.";
+        }
+
+      } else if (error.message) { // Fallback for other types of errors
+        finalErrorMessage = `Error: ${error.message}`;
       }
       
       setFirebaseVideoError(finalErrorMessage);
-      toast({ title: "Backend Call Error", description: finalErrorMessage, variant: "destructive" });
+      toast({ title: "Callable Function Call Error", description: finalErrorMessage, variant: "destructive", duration: 8000 });
     } finally {
       setIsGeneratingFirebaseVideo(false);
     }
@@ -1114,7 +1140,7 @@ export default function Home() {
                 className="w-full sm:w-auto"
               >
                 {isGeneratingFirebaseVideo ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Requesting from Backend...</>
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Requesting from Callable Function...</>
                 ) : (
                   <><Film className="mr-2 h-4 w-4" />Generate Mock Lip-Sync Video (Callable)</>
                 )}
@@ -1122,7 +1148,7 @@ export default function Home() {
 
               {firebaseVideoUrl && (
                 <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow space-y-2">
-                  <Label className="text-lg font-semibold text-foreground">Mock Video from Backend:</Label>
+                  <Label className="text-lg font-semibold text-foreground">Mock Video from Callable Function:</Label>
                   <video
                     key={firebaseVideoUrl}
                     src={firebaseVideoUrl}
@@ -1150,19 +1176,10 @@ export default function Home() {
                 <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm space-y-1">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-                    <p className="font-semibold">Backend Video Error:</p>
+                    <p className="font-semibold">Callable Function Error:</p>
                   </div>
                   <p>{firebaseVideoError}</p>
-                  {firebaseVideoError.includes("functions/unauthenticated") && (
-                    <p className="text-xs italic text-destructive/80 mt-1">
-                      Tip: Authentication failed. Please ensure you are signed in. Your session might have expired.
-                    </p>
-                  )}
-                  {firebaseVideoError.includes("functions/unavailable") || firebaseVideoError.includes("functions/internal") && (
-                    <p className="text-xs italic text-destructive/80 mt-1">
-                      Tip: The Firebase Function seems to be unavailable or encountered an internal error. Check function logs or emulator status. Ensure `NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL` in your .env file is correct if using the emulator.
-                    </p>
-                  )}
+                   {/* Specific guidance based on HttpsError codes can be added here if needed */}
                 </div>
               )}
             </div>
@@ -1260,3 +1277,4 @@ export default function Home() {
     </div>
   );
 }
+

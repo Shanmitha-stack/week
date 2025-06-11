@@ -13,31 +13,31 @@ export async function POST(request: Request) {
     const functionsEmulatorUrl = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL;
 
     // Server-side logging for diagnostics
-    console.log(`[API /api/firebase-lip-sync] Received NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${projectId}`);
-    console.log(`[API /api/firebase-lip-sync] Received NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL: ${functionsEmulatorUrl}`);
+    console.log(`[API /api/firebase-lip-sync] NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${projectId}`);
+    console.log(`[API /api/firebase-lip-sync] NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL: ${functionsEmulatorUrl}`);
 
     let functionUrl: string;
 
     const trimmedProjectId = projectId ? projectId.trim() : "";
-    const isPlaceholderProjectId = !trimmedProjectId ||
-                                   trimmedProjectId.toUpperCase() === "YOUR_PROJECT_ID" ||
-                                   trimmedProjectId.toLowerCase().includes("your_project_id") || 
-                                   trimmedProjectId.toLowerCase().startsWith("your-project") || 
-                                   trimmedProjectId.length < 4; 
+    const isInvalidProjectId = !trimmedProjectId ||
+                               trimmedProjectId.toUpperCase().includes("YOUR_PROJECT_ID") ||
+                               trimmedProjectId.toUpperCase().includes("YOUR-PROJECT") ||
+                               trimmedProjectId.length < 4; 
 
-    if (isPlaceholderProjectId) {
+    if (isInvalidProjectId) {
       const errorMessage = `Backend configuration error: Firebase project ID ('${projectId || 'Not found/empty'}') is missing or appears to be a placeholder. Please set NEXT_PUBLIC_FIREBASE_PROJECT_ID correctly in your .env file. This value is used to construct the Firebase Function URL.`;
       console.error(`[API /api/firebase-lip-sync] Configuration Error: ${errorMessage}`);
-      return NextResponse.json({ message: errorMessage }, { status: 500 });
+      return NextResponse.json({ message: errorMessage, errorType: 'CONFIG_ERROR_PROJECT_ID' }, { status: 500 });
     }
 
     if (functionsEmulatorUrl) {
-      if (functionsEmulatorUrl.includes("YOUR_PROJECT_ID") || functionsEmulatorUrl.includes("YOUR_PROJECT_ID_HERE")) {
-        const emulatorUrlError = `Backend configuration error: Firebase functions emulator URL ('${functionsEmulatorUrl}') appears to contain a placeholder project ID. Please check NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL in your .env file. It should be the base URL of the emulator (e.g., http://127.0.0.1:5001).`;
+      const trimmedEmulatorUrl = functionsEmulatorUrl.trim();
+      if (trimmedEmulatorUrl.toUpperCase().includes("YOUR_PROJECT_ID") || trimmedEmulatorUrl.toUpperCase().includes("YOUR-PROJECT")) {
+        const emulatorUrlError = `Backend configuration error: Firebase functions emulator URL ('${functionsEmulatorUrl}') appears to contain a placeholder project ID or path. It should be the base URL of the emulator (e.g., http://127.0.0.1:5001 or your Cloud Workstations equivalent). Please check NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL in your .env file.`;
         console.error(`[API /api/firebase-lip-sync] Configuration Error: ${emulatorUrlError}`);
-        return NextResponse.json({ message: emulatorUrlError }, { status: 500 });
+        return NextResponse.json({ message: emulatorUrlError, errorType: 'CONFIG_ERROR_EMULATOR_URL' }, { status: 500 });
       }
-      functionUrl = `${functionsEmulatorUrl}/${trimmedProjectId}/us-central1/prepareLipSyncVideo`;
+      functionUrl = `${trimmedEmulatorUrl}/${trimmedProjectId}/us-central1/prepareLipSyncVideo`;
     } else {
       functionUrl = `https://us-central1-${trimmedProjectId}.cloudfunctions.net/prepareLipSyncVideo`;
     }
@@ -51,7 +51,9 @@ export async function POST(request: Request) {
     }
 
     console.log(`[API /api/firebase-lip-sync] Calling Firebase Function at: ${functionUrl}`);
-    console.log(`[API /api/firebase-lip-sync] Sending to Firebase Function: text (len: ${typeof textToSpeak === 'string' ? textToSpeak.length : 'N/A'}), imageId: ${imageId}, Auth Header Present: ${!!authorizationHeader}`);
+    console.log(`[API /api/firebase-lip-sync] Sending to Firebase Function: text (len: ${typeof textToSpeak === 'string' ? textToSpeak.length : 'N/A'}), imageId: ${imageId}`);
+    console.log(`[API /api/firebase-lip-sync] Fetch Headers being sent:`, JSON.stringify(fetchHeaders));
+
 
     const firebaseResponse = await fetch(functionUrl, {
       method: 'POST',
@@ -61,21 +63,22 @@ export async function POST(request: Request) {
 
     if (!firebaseResponse.ok) {
       let errorBody = `Failed to call Firebase Function at ${functionUrl}. Status: ${firebaseResponse.status}`;
+      let errorData = null;
       try {
-        const fbErrorData = await firebaseResponse.json();
-        errorBody = fbErrorData.message || fbErrorData.error || errorBody;
-         if (firebaseResponse.status === 401) {
-          errorBody = `Authentication failed (401) when calling Firebase Function: ${fbErrorData.message || 'Unauthorized. Ensure a valid ID token is being sent.'}`;
-        } else if (firebaseResponse.status === 404 && typeof fbErrorData.error === 'string' && fbErrorData.error.includes('Function not found')) {
-            errorBody = `Firebase Function 'prepareLipSyncVideo' not found at ${functionUrl}. Ensure the function is deployed to region 'us-central1' or the emulator is running with the correct function name. Original error: ${fbErrorData.error}`;
-        } else if (firebaseResponse.status === 500 && typeof fbErrorData.error === 'string' && fbErrorData.error.includes('INTERNAL')) {
-             errorBody = `Firebase Function 'prepareLipSyncVideo' encountered an internal error at ${functionUrl}. Check function logs. Original error: ${fbErrorData.error}`;
+        errorData = await firebaseResponse.json();
+        errorBody = errorData.message || errorData.error || errorBody; // Prefer message/error from function
+        if (firebaseResponse.status === 401) {
+          errorBody = `Authentication failed (401) when calling Firebase Function. Function response: ${JSON.stringify(errorData) || 'Unauthorized. Ensure a valid ID token is being sent.'}`;
+        } else if (firebaseResponse.status === 404 && typeof errorData.error === 'string' && errorData.error.includes('Function not found')) {
+            errorBody = `Firebase Function 'prepareLipSyncVideo' not found at ${functionUrl}. Ensure the function is deployed to region 'us-central1' or the emulator is running with the correct function name. Original error: ${errorData.error}`;
+        } else if (firebaseResponse.status === 500 && typeof errorData.error === 'string' && errorData.error.includes('INTERNAL')) {
+             errorBody = `Firebase Function 'prepareLipSyncVideo' encountered an internal error at ${functionUrl}. Check function logs. Original error: ${errorData.error}`;
         }
       } catch (e) {
         console.warn(`[API /api/firebase-lip-sync] Could not parse error response body from Firebase Function. Raw status text: ${firebaseResponse.statusText}`);
       }
-      console.error(`[API /api/firebase-lip-sync] Firebase Function call failed: ${errorBody}`);
-      return NextResponse.json({ message: `Error from Firebase Function: ${errorBody}`, statusText: firebaseResponse.statusText }, { status: firebaseResponse.status });
+      console.error(`[API /api/firebase-lip-sync] Firebase Function call failed: ${errorBody}`, { status: firebaseResponse.status, errorData });
+      return NextResponse.json({ message: `Error from Firebase Function: ${errorBody}`, statusText: firebaseResponse.statusText, firebaseFunctionError: errorData }, { status: firebaseResponse.status });
     }
 
     const firebaseData = await firebaseResponse.json();

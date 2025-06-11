@@ -14,9 +14,14 @@ export async function POST(request: Request) {
 
     let functionUrl: string;
 
-    // Validate Project ID
-    if (!projectId || projectId === "YOUR_PROJECT_ID_HERE" || projectId.trim() === "") {
-      const errorMessage = 'Backend configuration error: Firebase project ID is missing or invalid. Please set NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env file.';
+    // Validate Project ID more robustly
+    const isInvalidProjectId = !projectId || 
+                               projectId.trim() === "" || 
+                               projectId.toLowerCase().includes("your_project_id") || // Catches "YOUR_PROJECT_ID", "your_project_id_here", etc.
+                               projectId.length < 4; // Arbitrary short length check for obviously invalid IDs
+
+    if (isInvalidProjectId) {
+      const errorMessage = `Backend configuration error: Firebase project ID ('${projectId || 'Not found'}') is missing or invalid. Please set NEXT_PUBLIC_FIREBASE_PROJECT_ID correctly in your .env file.`;
       console.error(`[API /api/firebase-lip-sync] ${errorMessage}`);
       return NextResponse.json({ message: errorMessage }, { status: 500 });
     }
@@ -67,20 +72,23 @@ export async function POST(request: Request) {
     console.error('[API /api/firebase-lip-sync] Critical error processing request:', error);
     let detailedErrorMessage = 'Critical error in the backend API when trying to communicate with Firebase Function.';
     
-    // Attempt to get projectId and functionsEmulatorUrl again for more contextual error messages,
-    // as they might not be in scope if the error occurred before their declaration in the try block.
-    // However, in this structure, they are declared before the fetch call.
     const projectIdForError = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     const emulatorUrlForError = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL;
+    
+    // Construct the target URL again for error context, respecting potential invalid projectId
+    const displayProjectId = (!projectIdForError || projectIdForError.trim() === "" || projectIdForError.toLowerCase().includes("your_project_id")) 
+        ? "YOUR_INVALID_PROJECT_ID" 
+        : projectIdForError;
+
     const targetFunctionUrlForError = emulatorUrlForError 
-        ? `${emulatorUrlForError}/${projectIdForError}/us-central1/prepareLipSyncVideo` 
-        : `https://us-central1-${projectIdForError}.cloudfunctions.net/prepareLipSyncVideo`;
+        ? `${emulatorUrlForError}/${displayProjectId}/us-central1/prepareLipSyncVideo` 
+        : `https://us-central1-${displayProjectId}.cloudfunctions.net/prepareLipSyncVideo`;
 
     if (error.name === 'TypeError' && error.message.includes('fetch failed')) {
         if (emulatorUrlForError) {
             detailedErrorMessage = `Network error: Could not connect to the Firebase Function. Attempted to reach emulator at '${targetFunctionUrlForError}'. Please ensure your Firebase emulator is running, accessible, and the function 'prepareLipSyncVideo' is available. Verify NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL and NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env file.`;
         } else {
-            detailedErrorMessage = `Network error: Could not connect to the Firebase Function. Attempted to reach deployed function at '${targetFunctionUrlForError}'. Ensure the function 'prepareLipSyncVideo' for project '${projectIdForError}' is deployed to region 'us-central1', and the URL is correct. Verify NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env file.`;
+            detailedErrorMessage = `Network error: Could not connect to the Firebase Function. Attempted to reach deployed function at '${targetFunctionUrlForError}'. Ensure the function 'prepareLipSyncVideo' for project '${displayProjectId}' is deployed to region 'us-central1', and the URL is correct. Verify NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env file.`;
         }
     } else if (error.message) {
         detailedErrorMessage = `An unexpected error occurred in the backend API: ${error.message}`;

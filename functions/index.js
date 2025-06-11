@@ -12,8 +12,8 @@ const functions = require('firebase-functions');
  */
 exports.prepareLipSyncVideo = functions.region('us-central1').https.onRequest(async (req, res) => {
   // Allow CORS for local development and if calling from a different domain
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.set('Access-Control-Allow-Origin', '*'); // Allow all origins (or restrict if needed for production)
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS'); // Specify allowed methods
   res.set('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {

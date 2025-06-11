@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
-import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Sparkles, Video, Film, UploadCloud } from 'lucide-react';
+import { Text, MicVocal, Loader2, ImagePlus, Volume2, StopCircle, AlertTriangle, Sparkles, Video, Film, UploadCloud, MessageSquareQuote } from 'lucide-react';
 import { prepareTextForSpeech } from '@/ai/flows/prepare-text-for-speech-flow';
 import { generateAnimatedFrame, type GenerateAnimatedFrameOutput } from '@/ai/flows/generate-animated-frame-flow';
 
@@ -47,10 +47,15 @@ export default function Home() {
   const [displayedFrameInAnimatedOutput, setDisplayedFrameInAnimatedOutput] = useState<string | null>(null);
 
 
-  // States for Firebase Lip-Sync Video section (now Callable Function)
+  // States for Firebase Lip-Sync Video section (Callable Function)
   const [isGeneratingFirebaseVideo, setIsGeneratingFirebaseVideo] = useState<boolean>(false);
   const [firebaseVideoUrl, setFirebaseVideoUrl] = useState<string | null>(null);
   const [firebaseVideoError, setFirebaseVideoError] = useState<string | null>(null);
+
+  // States for "True Lip-Sync Video Generation (Placeholder)" section
+  const [isGeneratingTrueLipSyncVideo, setIsGeneratingTrueLipSyncVideo] = useState<boolean>(false);
+  const [trueLipSyncVideoUrl, setTrueLipSyncVideoUrl] = useState<string | null>(null);
+  const [trueLipSyncVideoError, setTrueLipSyncVideoError] = useState<string | null>(null);
 
   // States for Firebase Storage Upload section
   const [storageImageFile, setStorageImageFile] = useState<File | null>(null);
@@ -96,6 +101,8 @@ export default function Home() {
       }
       setFirebaseVideoUrl(null);
       setFirebaseVideoError(null);
+      setTrueLipSyncVideoUrl(null);
+      setTrueLipSyncVideoError(null);
     } else {
       if (!isAnimatedOutputAnimatingRef.current && !isGeneratingAnimatedOutputRef.current) {
         setDisplayedFrameInAnimatedOutput(imagePreview);
@@ -129,7 +136,7 @@ export default function Home() {
       try {
         const urlString = functionsEmulatorUrl.startsWith('http://') || functionsEmulatorUrl.startsWith('https://')
           ? functionsEmulatorUrl
-          : `http://${functionsEmulatorUrl}`; // Prepend http if no protocol for URL parser
+          : `http://${functionsEmulatorUrl}`; 
         const url = new URL(urlString);
         const host = url.hostname;
         const port = parseInt(url.port, 10);
@@ -140,7 +147,6 @@ export default function Home() {
         
         console.log(`Attempting to connect Firebase Functions emulator to host: ${host}, port: ${port}`);
         fbConnectFunctionsEmulator(firebaseFunctions, host, port);
-        // toast({ title: "Emulator Info", description: `Firebase Functions emulator attempting connection to ${host}:${port}`, duration: 4000 });
       } catch (e: any) {
         console.error("Error parsing or connecting to Firebase Functions emulator URL:", functionsEmulatorUrl, e);
         toast({ 
@@ -151,7 +157,6 @@ export default function Home() {
         });
       }
     }
-
 
     return () => { 
       if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
@@ -202,6 +207,8 @@ export default function Home() {
 
     setFirebaseVideoUrl(null);
     setFirebaseVideoError(null);
+    setTrueLipSyncVideoUrl(null);
+    setTrueLipSyncVideoError(null);
   }, []);
 
 
@@ -262,6 +269,8 @@ export default function Home() {
     setTextForSimulatedClonedVoice(null); 
     setFirebaseVideoUrl(null);
     setFirebaseVideoError(null);
+    setTrueLipSyncVideoUrl(null);
+    setTrueLipSyncVideoError(null);
 
 
     let imageDataUri: string | undefined = undefined;
@@ -435,6 +444,8 @@ export default function Home() {
     setTextForSimulatedClonedVoice(null);
     setFirebaseVideoUrl(null);
     setFirebaseVideoError(null);
+    setTrueLipSyncVideoUrl(null);
+    setTrueLipSyncVideoError(null);
 
     if (typeof window !== 'undefined' && window.speechSynthesis && (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current || isAnimatedOutputSpeakingRef.current)) {
         window.speechSynthesis.cancel();
@@ -777,11 +788,10 @@ export default function Home() {
         toast({ title: "Attempting Anonymous Sign-In", description: "No user signed in. Attempting to sign in anonymously..." });
         try {
           await signInAnonymously(auth);
-          currentUser = auth.currentUser; // Refresh current user
+          currentUser = auth.currentUser; 
           if (currentUser) {
             toast({ title: "Anonymous Sign-In Successful", description: "Proceeding with video generation." });
           } else {
-            // This case should ideally not be reached if signInAnonymously resolves without error
              throw new Error("Anonymous sign-in completed but currentUser is still null.");
           }
         } catch (anonError: any) {
@@ -794,7 +804,6 @@ export default function Home() {
         }
       }
       
-      // This check is important in case the above logic somehow fails to set currentUser
       if (!currentUser) {
         setFirebaseVideoError("Authentication failed. No user available after sign-in attempt.");
         toast({ title: "Authentication Error", description: "No user available after sign-in attempt. Please try again.", variant: "destructive" });
@@ -830,8 +839,8 @@ export default function Home() {
       let finalErrorMessage = "An unexpected error occurred when calling the Firebase Function.";
       let toastTitle = "Callable Function Call Error";
       
-      if (error.code && error.message) { // Check if it's an HttpsError from Firebase
-        const httpsError = error as HttpsError;
+      const httpsError = error as HttpsError;
+      if (httpsError.code && httpsError.message) { 
         toastTitle = `Function Error: ${httpsError.code}`;
         finalErrorMessage = `Firebase Function Error: ${httpsError.message} (Code: ${httpsError.code})`;
         if (httpsError.details) {
@@ -843,8 +852,10 @@ export default function Home() {
            finalErrorMessage += " The function might be deploying or temporarily unavailable. Check emulator status or Firebase Console for deployed functions.";
         } else if (httpsError.code === 'internal') {
            finalErrorMessage += " The function encountered an internal error. Check function logs in the emulator or Firebase Console.";
+        } else if (httpsError.code === 'invalid-argument') {
+            finalErrorMessage += " The function reported invalid arguments. Check the data sent. " + (httpsError.details ? JSON.stringify(httpsError.details) : '');
         }
-      } else if (error.message) { // Fallback for other types of errors
+      } else if (error.message) { 
         finalErrorMessage = `Client-side error before/during function call: ${error.message}`;
       }
       
@@ -854,6 +865,54 @@ export default function Home() {
       setIsGeneratingFirebaseVideo(false);
     }
   };
+
+  const handleGenerateTrueLipSyncVideo = async () => {
+    if (!selectedImage) {
+      toast({ title: "Image Required", description: "Please upload an image in the first section.", variant: "destructive" });
+      return;
+    }
+    if (!selectedVoiceSample) {
+      toast({ title: "Voice Sample Required", description: "Please upload a voice sample in the 'Voice Cloning' section.", variant: "destructive" });
+      return;
+    }
+
+    setIsGeneratingTrueLipSyncVideo(true);
+    setTrueLipSyncVideoUrl(null);
+    setTrueLipSyncVideoError(null);
+    toast({ title: "Generating True Lip-Sync Video...", description: "Please wait." });
+
+    const formData = new FormData();
+    formData.append('image', selectedImage);
+    formData.append('audio', selectedVoiceSample);
+
+    try {
+      const response = await fetch('/api/true-lip-sync-video', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || `HTTP error! status: ${response.status}`);
+      }
+
+      if (result.videoUrl) {
+        setTrueLipSyncVideoUrl(result.videoUrl);
+        toast({ title: "True Lip-Sync Video Ready (Placeholder)", description: "Mock video URL received from placeholder backend." });
+      } else {
+        throw new Error(result.message || "Placeholder backend did not return a video URL.");
+      }
+    } catch (error: any) {
+      console.error("Error generating true lip-sync video:", error);
+      const errorMessage = error.message || "An unexpected error occurred.";
+      setTrueLipSyncVideoError(errorMessage);
+      toast({ title: "True Lip-Sync Video Error", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsGeneratingTrueLipSyncVideo(false);
+    }
+  };
+  
   
   const handleStorageImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -928,7 +987,7 @@ export default function Home() {
     }
   };
   
-  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingAnimatedOutput || isGeneratingFirebaseVideo || isUploadingToStorage;
+  const anyLoading = isGeneratingSpeech || isCloningVoice || isGeneratingAnimatedOutput || isGeneratingFirebaseVideo || isGeneratingTrueLipSyncVideo || isUploadingToStorage;
   const currentPreparedTextIsSpeaking = isSpeaking && preparedSpeechText && speakingText === preparedSpeechText;
   const currentSimulatedClonedVoiceIsSpeaking = isSimulatedClonedVoiceSpeaking && textForSimulatedClonedVoiceRef.current && textForSimulatedClonedVoiceRef.current === textForSimulatedClonedVoiceRef.current;
 
@@ -939,7 +998,7 @@ export default function Home() {
       <main className="flex-grow container mx-auto py-8 px-4">
         <div className="grid gap-8 md:gap-12">
 
-          <SectionCard title="Text &amp; Image to Speech Preparation" icon={<Text className="text-primary" />} >
+          <SectionCard title="Text &amp; Image to Speech Preparation" icon={<MessageSquareQuote className="text-primary" />} >
             <div className="space-y-4">
               <div>
                 <Label htmlFor="text-input" className="text-base">Enter your text:</Label>
@@ -1149,7 +1208,7 @@ export default function Home() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Lip-Sync Video Generation (Callable Function)" icon={<Video className="text-primary" />}>
+          <SectionCard title="Lip-Sync Video Generation (Callable Function)" icon={<Film className="text-primary" />}>
             <div className="space-y-4">
               <div>
                 <Label htmlFor="firebase-video-info" className="text-base">Image &amp; Audio Source for Backend Video:</Label>
@@ -1190,7 +1249,7 @@ export default function Home() {
                       if (videoElement.error) {
                          errorMsg = `Video error: ${videoElement.error.message} (code: ${videoElement.error.code})`;
                       }
-                      setFirebaseVideoError(errorMsg); // This error state is for video *playback*
+                      setFirebaseVideoError(errorMsg); 
                       toast({ title: "Video Playback Error", description: errorMsg, variant: "destructive" });
                     }}
                   >
@@ -1201,13 +1260,77 @@ export default function Home() {
                   </p>
                 </div>
               )}
-              {firebaseVideoError && ( // This displays errors from the function call or playback
+              {firebaseVideoError && ( 
                 <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm space-y-1">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 flex-shrink-0" />
                     <p className="font-semibold">Callable Function or Video Error:</p>
                   </div>
                   <p>{firebaseVideoError}</p>
+                </div>
+              )}
+            </div>
+          </SectionCard>
+
+          <SectionCard title="True Lip-Sync Video Generation (Placeholder)" icon={<Video className="text-primary" />}>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="true-lip-sync-info" className="text-base">Image &amp; Voice Source for Video:</Label>
+                {(imagePreview && selectedVoiceSample) ? (
+                  <p className="text-sm text-muted-foreground mt-1" id="true-lip-sync-info">
+                    Uses the image from "Text & Image to Speech Preparation" and the voice sample from "Voice Cloning" to request a mock lip-synced video from a placeholder backend API.
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground mt-1" id="true-lip-sync-info">
+                    Please upload an image in the first section AND a voice sample in the "Voice Cloning" section.
+                  </p>
+                )}
+              </div>
+              <Button
+                onClick={handleGenerateTrueLipSyncVideo}
+                disabled={anyLoading || !selectedImage || !selectedVoiceSample}
+                className="w-full sm:w-auto"
+              >
+                {isGeneratingTrueLipSyncVideo ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating Placeholder Video...</>
+                ) : (
+                  <><Video className="mr-2 h-4 w-4" />Generate True Lip-Sync Video (Placeholder)</>
+                )}
+              </Button>
+
+              {trueLipSyncVideoUrl && (
+                <div className="mt-6 p-4 border rounded-md bg-muted/30 shadow space-y-2">
+                  <Label className="text-lg font-semibold text-foreground">Mock Video from Placeholder API:</Label>
+                  <video
+                    key={trueLipSyncVideoUrl}
+                    src={trueLipSyncVideoUrl}
+                    controls
+                    autoPlay
+                    className="w-full rounded-md aspect-video bg-black"
+                    onError={(e) => {
+                      const videoElement = e.target as HTMLVideoElement;
+                      let errorMsg = "Error playing video.";
+                      if (videoElement.error) {
+                         errorMsg = `Video error: ${videoElement.error.message} (code: ${videoElement.error.code})`;
+                      }
+                      setTrueLipSyncVideoError(errorMsg);
+                      toast({ title: "Video Playback Error", description: errorMsg, variant: "destructive" });
+                    }}
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                  <p className="text-xs text-muted-foreground italic">
+                    This video is a mock response from a placeholder backend API simulating a true lip-sync process with an image and an audio file.
+                  </p>
+                </div>
+              )}
+              {trueLipSyncVideoError && (
+                <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm space-y-1">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+                    <p className="font-semibold">Placeholder Video Generation Error:</p>
+                  </div>
+                  <p>{trueLipSyncVideoError}</p>
                 </div>
               )}
             </div>
@@ -1305,4 +1428,3 @@ export default function Home() {
     </div>
   );
 }
-

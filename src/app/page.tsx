@@ -123,7 +123,7 @@ export default function Home() {
     
     setAnimatedOutputAiFrame(null);
     setAnimatedOutputError(null);
-    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Reset to original if available
+    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); 
 
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         if (isSpeakingRef.current || isSimulatedClonedVoiceSpeakingRef.current || isAnimatedOutputSpeakingRef.current ) {
@@ -151,7 +151,7 @@ export default function Home() {
       reader.onloadend = () => {
         const result = reader.result as string;
         setImagePreview(result);
-        setDisplayedFrameInAnimatedOutput(result); // Set initial frame for animated output
+        setDisplayedFrameInAnimatedOutput(result); 
       };
       reader.onerror = () => {
         setSelectedImage(null); 
@@ -188,9 +188,9 @@ export default function Home() {
     setIsSpeaking(false); 
     setSpeakingText(null);
     setIsSimulatedClonedVoiceSpeaking(false); 
-    setIsAnimatedOutputSpeaking(false); // Stop animated output speech too
+    setIsAnimatedOutputSpeaking(false); 
     
-    setAnimatedOutputAiFrame(null); // Clear AI frame from other section
+    setAnimatedOutputAiFrame(null); 
     setAnimatedOutputError(null);
     if (animatedOutputFlickerIntervalRef.current) {
       clearInterval(animatedOutputFlickerIntervalRef.current);
@@ -314,7 +314,7 @@ export default function Home() {
       setIsSpeaking(true); 
       setSpeakingText(textToSpeak); 
       setIsSimulatedClonedVoiceSpeaking(false); 
-      setIsAnimatedOutputSpeaking(false); // Stop other speech
+      setIsAnimatedOutputSpeaking(false); 
 
 
       setTimeout(() => {
@@ -501,10 +501,10 @@ export default function Home() {
 
   
   const getTextForAnimatedOutput = () => {
-    if (textForSimulatedClonedVoiceRef.current && textForSimulatedClonedVoiceRef.current.trim() !== "") {
-      return textForSimulatedClonedVoiceRef.current;
-    } 
-    else if (preparedSpeechTextRef.current && preparedSpeechTextRef.current.trim() !== "" && !preparedSpeechTextRef.current.toLowerCase().startsWith("no text was provided") && !preparedSpeechTextRef.current.toLowerCase().startsWith("error:")) {
+    if (preparedSpeechTextRef.current &&
+        preparedSpeechTextRef.current.trim() !== "" &&
+        !preparedSpeechTextRef.current.toLowerCase().startsWith("no text was provided") &&
+        !preparedSpeechTextRef.current.toLowerCase().startsWith("error:")) {
       return preparedSpeechTextRef.current;
     }
     return null;
@@ -516,7 +516,7 @@ export default function Home() {
       animatedOutputFlickerIntervalRef.current = null;
     }
     setIsAnimatedOutputAnimating(false);
-    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current || animatedOutputAiFrameRef.current); // Show AI frame if original is gone
+    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current || animatedOutputAiFrameRef.current); 
   }, []);
 
   const startAnimatedOutputFlicker = useCallback(() => {
@@ -524,13 +524,13 @@ export default function Home() {
       stopAnimatedOutputFlicker();
       return;
     }
-    stopAnimatedOutputFlicker(); // Clear any existing interval
+    stopAnimatedOutputFlicker(); 
     setIsAnimatedOutputAnimating(true);
     animatedOutputFlickerIntervalRef.current = setInterval(() => {
       setDisplayedFrameInAnimatedOutput(prev => 
         prev === imagePreviewRef.current ? animatedOutputAiFrameRef.current : imagePreviewRef.current
       );
-    }, 250); // Flicker interval
+    }, 250); 
   }, [stopAnimatedOutputFlicker]);
 
 
@@ -542,7 +542,7 @@ export default function Home() {
       return;
     }
     if (!textToSpeak) {
-      toast({ title: "Audio Text Required", description: "Please use 'Process Input for Speech' or 'Generate Speech with Cloned Voice (Mock)' first to generate text.", variant: "destructive" });
+      toast({ title: "Audio Text Required", description: "Please use 'Process Input for Speech' first to generate text for the animation.", variant: "destructive" });
       return;
     }
   
@@ -556,22 +556,21 @@ export default function Home() {
           window.speechSynthesis.cancel();
       }
     }
-    setIsSpeaking(false); // Stop other speech
+    setIsSpeaking(false); 
     setSpeakingText(null);
-    setIsSimulatedClonedVoiceSpeaking(false); // Stop other speech
+    setIsSimulatedClonedVoiceSpeaking(false); 
     setIsAnimatedOutputSpeaking(false);
     stopAnimatedOutputFlicker();
-    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Show original initially
+    setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); 
 
     toast({ title: "Generating Output...", description: "AI is creating an expressive frame and preparing speech..." });
   
     let aiFrameResult: GenerateAnimatedFrameOutput | null = null;
 
     try {
-      // 1. Generate AI Still Frame
       try {
         const textSnippet = textToSpeak.substring(0, 150);
-        const animationPrompt = `Your primary task is to transform the provided static photo into a single, highly expressive keyframe image. This new image must depict the person as if they are frozen mid-sentence, actively speaking the initial words of this text: "${textSnippet}". CRITICALLY, the generated image needs to show *clear visual changes* from the original photo, especially in the mouth shape (viseme) to precisely match the first phonemes of the text, and in the eye expression to convey engagement in speech. The overall facial expression should be dynamic and appropriate for the act of speaking these initial words. The primary output of this request MUST be the generated image.`;
+        const animationPrompt = `Your primary task is to transform the provided static photo into a single, highly expressive keyframe image. This new image must depict the person as if they are frozen mid-sentence, actively speaking the initial words of this text: "${textSnippet}". CRITICALLY, the generated image needs to show *clear visual changes* from the original photo, especially in the mouth shape (viseme) to precisely match the first phonemes of the text, and in the eye expression to convey engagement in speech. The overall facial expression should be dynamic and appropriate for the act of speaking these initial words. The output MUST be the generated image.`;
         
         aiFrameResult = await generateAnimatedFrame({
           originalImageDataUri: imagePreviewRef.current,
@@ -580,7 +579,7 @@ export default function Home() {
     
         if (aiFrameResult.generatedFrameDataUri) {
           setAnimatedOutputAiFrame(aiFrameResult.generatedFrameDataUri);
-          setDisplayedFrameInAnimatedOutput(aiFrameResult.generatedFrameDataUri); // Show AI frame once loaded
+          setDisplayedFrameInAnimatedOutput(aiFrameResult.generatedFrameDataUri); 
         } else {
             let userFriendlyAiMessage = "The AI couldn't create an image for this request. This can happen sometimes. You could try again, perhaps with different text or a slightly different image.";
             if (aiFrameResult.errorMessage) {
@@ -591,7 +590,7 @@ export default function Home() {
             console.warn('[GenerateAnimatedOutput] AI Frame Gen Issue:', aiFrameResult.errorMessage || 'AI model did not return an image.', 'Type:', aiFrameResult.errorType);
             setAnimatedOutputError(userFriendlyAiMessage);
             toast({ title: "AI Image Not Generated", description: userFriendlyAiMessage, variant: "default", duration: 7000 });
-            setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Revert to original
+            setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); 
         }
       } catch (frameError: any) {
         console.error('[GenerateAnimatedOutput] Error during AI frame generation call:', frameError);
@@ -599,11 +598,10 @@ export default function Home() {
         setAnimatedOutputError(message);
         toast({ title: "AI Frame Error", description: message, variant: "destructive" });
         setIsGeneratingAnimatedOutput(false);
-        setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); // Revert to original
-        return; // Stop if frame generation fails critically
+        setDisplayedFrameInAnimatedOutput(imagePreviewRef.current); 
+        return; 
       }
 
-      // 2. Play Speech & Start Animation
       if (isSpeechSupported && textToSpeak) {
         if (aiFrameResult?.generatedFrameDataUri) {
              toast({ title: "AI Frame Ready!", description: "Speaking the text with animation...", duration: 4000 });
@@ -611,10 +609,8 @@ export default function Home() {
              toast({ title: "AI Frame Failed", description: "Speaking the text with original image...", duration: 5000 });
         }
 
-        // Slight delay to ensure state updates for AI frame are processed
         setTimeout(() => {
           if (animatedOutputSpeakingTextContentRef.current !== textToSpeak || !isGeneratingAnimatedOutputRef.current) {
-            // If text changed or generation was cancelled
             setIsGeneratingAnimatedOutput(false);
             return;
           }
@@ -622,13 +618,13 @@ export default function Home() {
           const utterance = new SpeechSynthesisUtterance(textToSpeak);
           utterance.onstart = () => {
             setIsAnimatedOutputSpeaking(true);
-            if (animatedOutputAiFrameRef.current && imagePreviewRef.current) { // Only animate if both frames exist
+            if (animatedOutputAiFrameRef.current && imagePreviewRef.current) { 
               startAnimatedOutputFlicker();
             }
           };
           utterance.onend = () => {
             setIsAnimatedOutputSpeaking(false);
-            stopAnimatedOutputFlicker();
+            // stopAnimatedOutputFlicker(); // Keep animation going as per previous request
             setIsGeneratingAnimatedOutput(false); 
           };
           utterance.onerror = (event) => {
@@ -636,7 +632,7 @@ export default function Home() {
             let toastTitle = "Animated Speech Error";
             let toastVariant: "destructive" | "default" = "destructive";
             if (event.error === 'interrupted') {
-              toastTitle = "Animated Speech Interrupted";
+              toastTitle = "Speech Interrupted";
               toastMessage = "Animated output playback was interrupted.";
               toastVariant = "default";
             }
@@ -649,7 +645,7 @@ export default function Home() {
         }, 100);
       } else {
         toast({ title: "Speech Not Available", description: "Browser speech not supported or no text for animation.", duration: 5000 });
-        setIsGeneratingAnimatedOutput(false); // End loading if not speaking
+        setIsGeneratingAnimatedOutput(false); 
       }
 
     } catch (error: any) { 
@@ -660,19 +656,14 @@ export default function Home() {
       setIsGeneratingAnimatedOutput(false);
       setDisplayedFrameInAnimatedOutput(imagePreviewRef.current);
     } 
-    // isGeneratingAnimatedOutput is set to false inside speech handlers or if speech is skipped
   };
 
   const handleStopAnimatedOutput = () => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel(); // This will trigger onend/onerror for the utterance
+      window.speechSynthesis.cancel(); 
     }
-    setIsAnimatedOutputSpeaking(false); // Explicitly set, as cancel might be async
+    setIsAnimatedOutputSpeaking(false); 
     stopAnimatedOutputFlicker();
-    // isGeneratingAnimatedOutput should already be false if we are in a "stoppable" state
-    // If it was mid-generation, the button wouldn't be for stopping.
-    // If it's clicked after generation and speech has ended but animation is manually kept, 
-    // then isGeneratingAnimatedOutput is false.
   };
   
   
@@ -823,7 +814,7 @@ export default function Home() {
                 <Label htmlFor="animated-output-info" className="text-base">Image &amp; Audio Source for Output:</Label>
                  {imagePreview ? (
                     <p className="text-sm text-muted-foreground mt-1" id="animated-output-info">
-                      Using your uploaded image for AI expressive frame generation and flicker animation. Audio will be synthesized from prepared text.
+                      Using your uploaded image for AI expressive frame generation and flicker animation. Audio will be synthesized from the text generated by "Process Input for Speech".
                     </p>
                   ) : (
                     <p className="text-sm text-muted-foreground mt-1" id="animated-output-info">
@@ -894,7 +885,7 @@ export default function Home() {
                   </div>
                 )}
                  <p className="text-xs text-muted-foreground mt-2 italic">
-                    This feature generates an AI expressive still frame from your image, animates it through flickering, and plays browser-synthesized audio from your prepared text.
+                    This feature generates an AI expressive still frame from your image, animates it through flickering, and plays browser-synthesized audio from the text generated by "Process Input for Speech".
                   </p>
               </div>
             </div>
@@ -907,3 +898,4 @@ export default function Home() {
     </div>
   );
 }
+

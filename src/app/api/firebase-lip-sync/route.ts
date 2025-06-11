@@ -46,9 +46,9 @@ export async function POST(request: Request) {
         errorBody = fbErrorData.message || fbErrorData.error || errorBody;
          // Add more specific check for common function errors like "Function not found"
         if (firebaseResponse.status === 404 && typeof fbErrorData.error === 'string' && fbErrorData.error.includes('Function not found')) {
-            errorBody = `Firebase Function not found at ${functionUrl}. Ensure the function is deployed or the emulator is running with the correct function name. Original error: ${fbErrorData.error}`;
+            errorBody = `Firebase Function 'prepareLipSyncVideo' not found at ${functionUrl}. Ensure the function is deployed to region 'us-central1' or the emulator is running with the correct function name. Original error: ${fbErrorData.error}`;
         } else if (firebaseResponse.status === 500 && typeof fbErrorData.error === 'string' && fbErrorData.error.includes('INTERNAL')) {
-             errorBody = `Firebase Function encountered an internal error at ${functionUrl}. Check function logs. Original error: ${fbErrorData.error}`;
+             errorBody = `Firebase Function 'prepareLipSyncVideo' encountered an internal error at ${functionUrl}. Check function logs. Original error: ${fbErrorData.error}`;
         }
 
       } catch (e) {
@@ -66,8 +66,22 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('[API /api/firebase-lip-sync] Critical error processing request:', error);
     let detailedErrorMessage = 'Critical error in the backend API when trying to communicate with Firebase Function.';
+    
+    // Attempt to get projectId and functionsEmulatorUrl again for more contextual error messages,
+    // as they might not be in scope if the error occurred before their declaration in the try block.
+    // However, in this structure, they are declared before the fetch call.
+    const projectIdForError = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    const emulatorUrlForError = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL;
+    const targetFunctionUrlForError = emulatorUrlForError 
+        ? `${emulatorUrlForError}/${projectIdForError}/us-central1/prepareLipSyncVideo` 
+        : `https://us-central1-${projectIdForError}.cloudfunctions.net/prepareLipSyncVideo`;
+
     if (error.name === 'TypeError' && error.message.includes('fetch failed')) {
-        detailedErrorMessage = 'Network error: Could not connect to the Firebase Function. Ensure the emulator is running and accessible at the configured URL, or the deployed function URL is correct and the function is deployed.';
+        if (emulatorUrlForError) {
+            detailedErrorMessage = `Network error: Could not connect to the Firebase Function. Attempted to reach emulator at '${targetFunctionUrlForError}'. Please ensure your Firebase emulator is running, accessible, and the function 'prepareLipSyncVideo' is available. Verify NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL and NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env file.`;
+        } else {
+            detailedErrorMessage = `Network error: Could not connect to the Firebase Function. Attempted to reach deployed function at '${targetFunctionUrlForError}'. Ensure the function 'prepareLipSyncVideo' for project '${projectIdForError}' is deployed to region 'us-central1', and the URL is correct. Verify NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env file.`;
+        }
     } else if (error.message) {
         detailedErrorMessage = `An unexpected error occurred in the backend API: ${error.message}`;
     }

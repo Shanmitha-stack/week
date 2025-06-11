@@ -1061,9 +1061,17 @@ export default function Home() {
                 </div>
               )}
               {firebaseVideoError && (
-                <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5" />
-                  <p>Backend Video Error: {firebaseVideoError}</p>
+                <div className="mt-2 p-3 border border-destructive/50 rounded-md bg-destructive/10 text-destructive text-sm space-y-1">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+                    <p className="font-semibold">Backend Video Error:</p>
+                  </div>
+                  <p>{firebaseVideoError}</p>
+                  {firebaseVideoError.includes("Network error: Could not connect") && (
+                    <p className="text-xs italic text-destructive/80 mt-1">
+                      Tip: Ensure your Firebase emulator is running (if testing locally) and your <code>.env</code> file has the correct <code>NEXT_PUBLIC_FIREBASE_PROJECT_ID</code> and <code>NEXT_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_URL</code> (if applicable). The function name expected is <code>prepareLipSyncVideo</code> in region <code>us-central1</code>.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -1077,4 +1085,3 @@ export default function Home() {
     </div>
   );
 }
-
